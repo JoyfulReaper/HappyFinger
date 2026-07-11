@@ -1,4 +1,9 @@
-using HappyGopher;
+/*
+ * Happy Finger Server
+ * Copyright (c) 2026 Kyle Givler
+ * Licensed under the MIT License.
+ */
+
 using JoyfulReaperLib.JRNet;
 using Microsoft.Extensions.Options;
 using System.Buffers;

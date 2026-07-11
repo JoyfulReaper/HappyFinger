@@ -11,7 +11,7 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddWindowsService(options =>
 {
-    options.ServiceName = "Happy Gopher Server";
+    options.ServiceName = "Happy Finger Server";
 });
 
 builder.Services
