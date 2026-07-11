@@ -25,6 +25,9 @@ public class FingerWorker(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: false);
 
+    private static readonly ReadOnlyMemory<byte> ResponseBytes =
+        RequestEncoding.GetBytes("You fingered me! How dare you!\r\n");
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         IPAddress ipAddress = IPAddressUtils.ParseListenAddress(options.Value.ListenAddress);
@@ -113,7 +116,10 @@ public class FingerWorker(
                 await using NetworkStream stream = client.GetStream();
                 string? request = await ReadAsync(stream, options.Value.RequestTimeoutSeconds, stoppingToken);
 
-                Console.Out.WriteLine($"Received request: {request ?? "<no data>"}");
+                logger.LogDebug("Received request: {Request}", request ?? "<no data>");
+
+                await stream.WriteAsync(ResponseBytes, stoppingToken);
+                await stream.FlushAsync(stoppingToken);
             }
             catch (OperationCanceledException)
             {
