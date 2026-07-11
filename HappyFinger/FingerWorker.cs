@@ -121,7 +121,7 @@ public class FingerWorker(
                 await using NetworkStream stream = client.GetStream();
                 string? request = await ReadAsync(stream, options.Value.RequestTimeoutSeconds, stoppingToken);
 
-                logger.LogDebug("Received request: {Request}", request ?? "<no data>");
+                logger.LogDebug("Received request: {Request} from {Remote}.", request ?? "<no data>", client.Client.RemoteEndPoint);
 
                 await stream.WriteAsync(ResponseBytes, stoppingToken);
                 await stream.FlushAsync(stoppingToken);

@@ -5,7 +5,6 @@
  */
 
 using HappyFinger;
-using HappyGopher;
 
 var builder = Host.CreateApplicationBuilder(args);
 
