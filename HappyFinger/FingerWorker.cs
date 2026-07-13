@@ -125,12 +125,27 @@ public class FingerWorker(
         bool shouldPublish = true;
 
         string remoteString = "unknown";
+        bool isIgnoredTelemetrySource;
 
         using (client)
         {
             client.NoDelay = true;
             EndPoint? remote = client.Client.RemoteEndPoint;
             remoteString = remote?.ToString() ?? "unknown";
+
+            var remoteAddress = (remote as IPEndPoint)?
+                .Address
+                .MapToIPv4()
+                .ToString();
+
+            isIgnoredTelemetrySource =
+                !string.IsNullOrWhiteSpace(
+                    options.Value.TelemetryIgnoredRemoteAddress) &&
+                string.Equals(
+                    remoteAddress,
+                    options.Value.TelemetryIgnoredRemoteAddress,
+                    StringComparison.OrdinalIgnoreCase);
+
             try
             {
                 await using NetworkStream stream = client.GetStream();
@@ -217,8 +232,13 @@ public class FingerWorker(
         }
         stopwatch.Stop();
 
-        if (!shouldPublish)
+        if (!shouldPublish || isIgnoredTelemetrySource)
         {
+            logger.LogDebug(
+                "Skipping telemetry for health-check connection {ConnectionId} from {Remote}.",
+                connectionId,
+                remoteString);
+
             return;
         }
 

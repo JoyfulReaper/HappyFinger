@@ -13,4 +13,5 @@ public sealed class HappyFingerOptions
     public int Port { get; init; } = 79;
     public int MaxConcurrentConnections { get; init; } = 64;
     public int RequestTimeoutSeconds { get; init; } = 15;
+    public string? TelemetryIgnoredRemoteAddress { get; set; }
 }
