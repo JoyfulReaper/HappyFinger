@@ -34,6 +34,9 @@ You fingered me! How dare you!
 
 Future versions may serve profile text, project status, GitHub activity, uptime, or other small public status information.
 
+# Try it live:
+finger.kgivler.com:79
+
 ## Requirements
 
 * [.NET 10 SDK](https://dotnet.microsoft.com/download)
