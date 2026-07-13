@@ -1,0 +1,17 @@
+HappyFinger Public Directory
+
+Login              Description
+-----------------  ------------------------------------------
+kyle               About Kyle Givler
+now                What Kyle is currently working on from the configured .plan file
+projects           Current software projects
+services           Public services running on this server
+randomsteam        Random Steam Game project information
+<steam-id>         Pick a random game from a public Steam library
+reapershell        ReaperShell project information
+help               HappyFinger usage information
+
+Usage:
+  finger <login>@finger.kgivler.com
+  finger -l <login>@finger.kgivler.com
+

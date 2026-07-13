@@ -22,11 +22,12 @@ Current behavior:
 * Limits concurrent connections
 * Enforces a request timeout
 * Reads a single request line ending in `\n` or `\r\n`
-* Responds with fixed directory and profile-style text records
+* Responds with file-backed directory and profile-style text records
+* Ships packaged default records and can read optional production overrides
 * Can run from the console during development
 * Includes Windows Service support through .NET hosting
 
-The current responses are intentionally simple records such as:
+The packaged default responses are intentionally simple records such as:
 
 ```text
 HappyFinger Public Directory
@@ -107,6 +108,10 @@ The default configuration resembles:
     "Path": "data/.plan",
     "MaxBytes": 16384
   },
+  "FingerContent": {
+    "OverrideDirectory": null,
+    "MaxBytes": 16384
+  },
   "RandomSteamGame": {
     "BaseUrl": "https://randomsteam.kgivler.com/",
     "TimeoutSeconds": 5
@@ -116,16 +121,18 @@ The default configuration resembles:
 
 ### Configuration Options
 
-| Setting                    |     Default | Description                                       |
-| -------------------------- | ----------: | ------------------------------------------------- |
-| `ListenAddress`            | `127.0.0.1` | Local IP address on which the TCP server listens. |
-| `Port`                     |        `79` | TCP port used by the server.                      |
-| `MaxConcurrentConnections` |        `64` | Maximum number of active client connections.      |
-| `RequestTimeoutSeconds`    |        `15` | Time allowed for a client to send a request line. |
-| `PlanFile:Path`            | `data/.plan` | Trusted path for the `now` record `.plan` file.  |
-| `PlanFile:MaxBytes`        |     `16384` | Maximum `.plan` bytes read per request.           |
-| `RandomSteamGame:BaseUrl`  | `https://randomsteam.kgivler.com/` | Random Steam Game API base URL. |
-| `RandomSteamGame:TimeoutSeconds` | `5` | Timeout for Random Steam Game API calls.          |
+| Setting                           |     Default | Description                                       |
+| --------------------------------- | ----------: | ------------------------------------------------- |
+| `ListenAddress`                   | `127.0.0.1` | Local IP address on which the TCP server listens. |
+| `Port`                            |        `79` | TCP port used by the server.                      |
+| `MaxConcurrentConnections`        |        `64` | Maximum number of active client connections.      |
+| `RequestTimeoutSeconds`           |        `15` | Time allowed for a client to send a request line. |
+| `PlanFile:Path`                   | `data/.plan` | Trusted path for the `now` record `.plan` file.  |
+| `PlanFile:MaxBytes`               |     `16384` | Maximum `.plan` bytes read per request.           |
+| `FingerContent:OverrideDirectory` |      `null` | Optional absolute directory for editable record overrides. |
+| `FingerContent:MaxBytes`          |     `16384` | Maximum static record bytes read per request.     |
+| `RandomSteamGame:BaseUrl`         | `https://randomsteam.kgivler.com/` | Random Steam Game API base URL. |
+| `RandomSteamGame:TimeoutSeconds`  |         `5` | Timeout for Random Steam Game API calls.          |
 
 For a public server, bind to all interfaces:
 
@@ -168,7 +175,28 @@ finger 10000000000000000@finger.kgivler.com
 The Steam profile and game details must be public. HappyFinger calls the
 configured Random Steam Game API and each request may return a different game.
 If Random Steam Game cannot select a usable game, HappyFinger returns a generic
-unavailable message instead of exposing upstream error details.
+file-backed unavailable message instead of exposing upstream error details.
+
+## File-Backed Static Records
+
+Static public records are loaded from trusted text files. Packaged defaults are
+included in the application under `content/`, so HappyFinger can serve records
+without any external files. Production can optionally set
+`FingerContent:OverrideDirectory` to an absolute directory of editable `.txt`
+files. Override files are read on each matching request, so changes take effect
+on the next Finger request without a container restart.
+
+The route set is fixed in code. Query text, usernames, Steam IDs, response
+types, URLs, and request contents are never treated as file paths. Missing,
+empty, whitespace-only, or unreadable override files fall back to the packaged
+defaults. If both override and packaged files are unavailable, HappyFinger
+returns a small emergency response using the intended controlled response type.
+
+Static records are decoded as UTF-8, bounded by `FingerContent:MaxBytes`,
+normalized to CRLF, and stripped of unsafe terminal control and Unicode
+formatting characters. Tabs and meaningful internal blank lines are preserved.
+If a static record exceeds the configured size, HappyFinger returns the
+permitted content with `[Content truncated]`.
 
 ## Traditional `.plan` Support
 
@@ -182,9 +210,9 @@ now
 
 When the file is available, the response begins with `Kyle's Plan`, followed by
 the file contents. If the file is missing, empty, unreadable, or otherwise
-unavailable, HappyFinger safely falls back to the built-in static `now`
-response. The configured maximum read size prevents unbounded file reads; if
-the file is larger than the limit, HappyFinger returns the permitted content and
+unavailable, HappyFinger safely falls back to the file-backed `now-fallback.txt`
+record. The configured maximum read size prevents unbounded file reads; if the
+file is larger than the limit, HappyFinger returns the permitted content and
 adds `[Plan truncated]`.
 
 The `.plan` file path comes only from trusted application configuration. Finger
@@ -236,8 +264,9 @@ random-game-unavailable
 Steam ID was valid, but Random Steam Game could not return a usable game.
 
 HappyFinger telemetry does not include Steam IDs, selected game names, Steam app
-IDs, API URLs, response bodies, or profile details. Random Steam Game publishes
-its own detailed game-pick telemetry independently.
+IDs, API URLs, response bodies, profile details, file paths, override usage, or
+file contents. Random Steam Game publishes its own detailed game-pick telemetry
+independently.
 
 Example payload:
 
@@ -288,7 +317,8 @@ dotnet publish .\HappyFinger\HappyFinger.csproj `
     --output .\publish\happyfinger
 ```
 
-The publish output should include the executable and `appsettings.json`.
+The publish output should include the executable, `appsettings.json`, and the
+packaged `content/` directory.
 
 ## VPS Deployment Walkthrough
 
@@ -506,34 +536,57 @@ sudo systemctl start happyfinger
 sudo systemctl status happyfinger --no-pager
 ```
 
-### Docker Compose `.plan` Mount
+### Docker Compose Data Directory Mount
 
-For Compose deployments, mount the host `.plan` file read-only and point
-HappyFinger at the container path:
+For Compose deployments, mount the whole HappyFinger data directory read-only.
+The `.plan` file remains separate from editable static records:
 
 ```yaml
 services:
   happyfinger:
     environment:
-      PlanFile__Path: /data/.plan
-      PlanFile__MaxBytes: 16384
+      PlanFile__Path: "/data/happyfinger/.plan"
+      PlanFile__MaxBytes: "16384"
+
+      FingerContent__OverrideDirectory: "/data/happyfinger/records"
+      FingerContent__MaxBytes: "16384"
+
       RandomSteamGame__BaseUrl: "https://randomsteam.kgivler.com/"
       RandomSteamGame__TimeoutSeconds: "5"
+
     volumes:
-      - ./data/happyfinger/.plan:/data/.plan:ro
+      - ./data/happyfinger:/data/happyfinger:ro
+```
+
+Remove the previous single-file mount when switching to the directory mount:
+
+```yaml
+- ./data/happyfinger/.plan:/data/.plan:ro
 ```
 
 No additional Docker network or exposed container port is required for the
 initial Random Steam integration because HappyFinger calls the public HTTPS
 endpoint.
 
-The host file must exist before Compose starts:
+Create the host directories:
 
 ```bash
 cd /opt/joyful-stack
 
-mkdir -p data/happyfinger
+mkdir -p data/happyfinger/records
+```
 
+Seed editable production records from a repository checkout:
+
+```bash
+cp HappyFinger/HappyFinger/content/*.txt \
+  data/happyfinger/records/
+```
+
+Do not overwrite an existing production `.plan` during updates. Create it only
+when needed:
+
+```bash
 cat > data/happyfinger/.plan <<'EOF'
 Building HappyFinger into a useful public directory.
 Next up: Random Steam Game integration.
@@ -550,6 +603,8 @@ docker compose up -d \
 ```
 
 The container only reads the mounted file; it does not need write access.
+Editing a mounted `.txt` record takes effect on the next matching Finger
+request without recreating or restarting the container.
 
 ## Troubleshooting
 
@@ -584,7 +639,7 @@ Common problems:
 
 ## Current Limitations
 
-* Fixed response records only
+* Fixed route set only
 * No per-user profile lookup yet
 * No dynamic project/status output yet
 * No authentication or access control
@@ -596,7 +651,7 @@ Common problems:
 ```text
 HappyFinger.slnx
 ├── HappyFinger/
-│   ├── data/
+│   ├── content/
 │   ├── Program.cs
 │   ├── FingerWorker.cs
 │   ├── HappyFingerOptions.cs

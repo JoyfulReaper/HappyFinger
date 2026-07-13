@@ -34,6 +34,19 @@ builder.Services
     .ValidateOnStart();
 
 builder.Services
+    .AddOptions<FingerContentOptions>()
+    .Bind(builder.Configuration.GetSection(FingerContentOptions.SectionName))
+    .Validate(
+        options => string.IsNullOrWhiteSpace(options.OverrideDirectory) ||
+            Path.IsPathFullyQualified(options.OverrideDirectory),
+        "FingerContent:OverrideDirectory must be empty or an absolute path.")
+    .Validate(options => options.MaxBytes > 0, "FingerContent:MaxBytes must be positive.")
+    .Validate(
+        options => options.MaxBytes <= FingerContentOptions.MaxAllowedBytes,
+        $"FingerContent:MaxBytes must be less than or equal to {FingerContentOptions.MaxAllowedBytes}.")
+    .ValidateOnStart();
+
+builder.Services
     .AddOptions<RandomSteamGameOptions>()
     .Bind(builder.Configuration.GetSection(RandomSteamGameOptions.SectionName))
     .Validate(options => !string.IsNullOrWhiteSpace(options.BaseUrl), "RandomSteamGame:BaseUrl must not be empty.")
@@ -51,6 +64,7 @@ builder.Services.AddMissionControlClient(
         MissionControlClientOptions.SectionName));
 
 builder.Services.AddSingleton<IPlanFileReader, PlanFileReader>();
+builder.Services.AddSingleton<IFingerContentProvider, FileFingerContentProvider>();
 builder.Services.AddSingleton<IFingerResponseResolver, FingerResponseResolver>();
 builder.Services.AddSingleton<IRandomSteamGameClient, RandomSteamGameClient>();
 builder.Services.AddHttpClient(

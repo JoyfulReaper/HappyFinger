@@ -1,0 +1,14 @@
+Login: kyle
+Name: Kyle Givler
+Website: https://kgivler.com
+GitHub: https://github.com/JoyfulReaper
+Preferred language: C#
+Interests: Backend development, networking, old protocols,
+           game tools, and RimWorld modding
+
+Project:
+  Building small, fast, useful software under JoyfulReaper.
+
+Plan:
+  Improve HappyFinger and keep making strange Internet services.
+

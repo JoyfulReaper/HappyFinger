@@ -1,0 +1,9 @@
+Random Steam Game
+
+A random game could not be selected.
+
+The Steam profile may be private, the library may be empty, or
+Random Steam Game may be temporarily unavailable.
+
+Verify that the Steam profile and game details are public, then try again.
+

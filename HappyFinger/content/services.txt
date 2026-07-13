@@ -1,0 +1,24 @@
+Public Services
+
+Finger
+  finger.kgivler.com:79
+  Public directory and project information.
+
+Gopher
+  gopher.kgivler.com:70
+  Classic Gopher content server.
+
+Echo
+  echo.kgivler.com:7
+  TCP Echo Protocol server.
+
+Random Steam Game
+  https://randomsteam.kgivler.com
+  Random game picker for Steam libraries.
+
+Website
+  https://kgivler.com
+
+These services are monitored and report operational events to
+Mission Control.
+

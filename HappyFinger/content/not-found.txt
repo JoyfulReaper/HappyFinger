@@ -1,0 +1,5 @@
+No matching HappyFinger record was found.
+
+Send an empty query to view the directory, or query:
+  help
+

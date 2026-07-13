@@ -1,0 +1,17 @@
+Project: Random Steam Game
+
+A fast random game picker designed for large Steam libraries.
+
+Features:
+  - Steam ID and vanity URL support
+  - Fast cached library retrieval
+  - Unplayed-only filtering
+  - Temporary game exclusions
+  - Production telemetry through Mission Control
+
+Website:
+  https://randomsteam.kgivler.com
+
+Source:
+  https://github.com/JoyfulReaper/RandomSteamGame
+
