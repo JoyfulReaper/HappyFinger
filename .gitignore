@@ -9,6 +9,7 @@
 *.user
 *.userosscache
 *.sln.docstates
+HappyFinger/data/.plan
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

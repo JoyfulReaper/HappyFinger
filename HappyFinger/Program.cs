@@ -22,10 +22,22 @@ builder.Services
     .Validate(options => options.RequestTimeoutSeconds > 0, "Finger:RequestTimeoutSeconds must be positive.")
     .ValidateOnStart();
 
+builder.Services
+    .AddOptions<PlanFileOptions>()
+    .Bind(builder.Configuration.GetSection(PlanFileOptions.SectionName))
+    .Validate(options => !string.IsNullOrWhiteSpace(options.Path), "PlanFile:Path must not be empty.")
+    .Validate(options => options.MaxBytes > 0, "PlanFile:MaxBytes must be positive.")
+    .Validate(
+        options => options.MaxBytes <= PlanFileOptions.MaxAllowedBytes,
+        $"PlanFile:MaxBytes must be less than or equal to {PlanFileOptions.MaxAllowedBytes}.")
+    .ValidateOnStart();
+
 builder.Services.AddMissionControlClient(
     builder.Configuration.GetSection(
         MissionControlClientOptions.SectionName));
 
+builder.Services.AddSingleton<IPlanFileReader, PlanFileReader>();
+builder.Services.AddSingleton<IFingerResponseResolver, FingerResponseResolver>();
 builder.Services.AddHostedService<FingerWorker>();
 
 var host = builder.Build();

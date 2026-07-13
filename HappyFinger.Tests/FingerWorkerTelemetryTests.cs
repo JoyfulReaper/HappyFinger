@@ -15,7 +15,8 @@ public sealed class FingerWorkerTelemetryTests
         { "unknown\r\n", FingerResponseTypes.NotFound },
         { "/Wrong\r\n", FingerResponseTypes.NotFound },
         { "name@host\r\n", FingerResponseTypes.ForwardingNotSupported },
-        { "joke\r\n", FingerResponseTypes.Joke }
+        { "joke\r\n", FingerResponseTypes.Joke },
+        { "now\r\n", FingerResponseTypes.Now }
     };
 
     [Theory]
@@ -25,7 +26,13 @@ public sealed class FingerWorkerTelemetryTests
         string expectedResponseType)
     {
         var missionControlClient = new TestMissionControlClient();
-        FingerWorker worker = CreateWorker(missionControlClient);
+        FingerWorker worker = CreateWorker(
+            missionControlClient,
+            responseResolver: CreateResolver(
+                new PlanFileResult(
+                    Available: true,
+                    Content: "public plan content",
+                    Truncated: false)));
         var stream = new ScriptedStream(Encoding.UTF8.GetBytes(request));
 
         await worker.HandleConnectionAsync(
@@ -42,6 +49,35 @@ public sealed class FingerWorkerTelemetryTests
         Assert.True(payload.Succeeded);
         Assert.Equal(1, stream.WriteCount);
         Assert.Equal(1, stream.FlushCount);
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_FileBackedNowTelemetryDoesNotIncludePlanContentOrPath()
+    {
+        var missionControlClient = new TestMissionControlClient();
+        FingerWorker worker = CreateWorker(
+            missionControlClient,
+            responseResolver: CreateResolver(
+                new PlanFileResult(
+                    Available: true,
+                    Content: "private plan detail",
+                    Truncated: false)));
+        var stream = new ScriptedStream(Encoding.UTF8.GetBytes("now\r\n"));
+
+        await worker.HandleConnectionAsync(
+            connectionId: 1,
+            stream,
+            CreateRemote(),
+            CancellationToken.None);
+
+        var payload = AssertPublishedPayload(missionControlClient);
+        string payloadText = payload.ToString();
+
+        Assert.Equal(FingerResponseTypes.Now, payload.ResponseType);
+        Assert.Equal("served", payload.Outcome);
+        Assert.True(payload.Succeeded);
+        Assert.DoesNotContain("private plan detail", payloadText);
+        Assert.DoesNotContain("data/.plan", payloadText);
     }
 
     [Fact]
@@ -173,15 +209,27 @@ public sealed class FingerWorkerTelemetryTests
 
     private static FingerWorker CreateWorker(
         TestMissionControlClient missionControlClient,
-        HappyFingerOptions? options = null) =>
+        HappyFingerOptions? options = null,
+        IFingerResponseResolver? responseResolver = null) =>
         new(
             NullLogger<FingerWorker>.Instance,
             missionControlClient,
+            responseResolver ?? CreateResolver(),
             Options.Create(
                 options ?? new HappyFingerOptions
                 {
                     RequestTimeoutSeconds = 1
                 }));
+
+    private static IFingerResponseResolver CreateResolver(
+        PlanFileResult? result = null) =>
+        new FingerResponseResolver(
+            new TestPlanFileReader(
+                result ??
+                new PlanFileResult(
+                    Available: false,
+                    Content: "",
+                    Truncated: false)));
 
     private static IPEndPoint CreateRemote() =>
         new(IPAddress.Parse("203.0.113.10"), 54321);
@@ -219,6 +267,14 @@ public sealed class FingerWorkerTelemetryTests
         object? Payload,
         DateTimeOffset OccurredAt,
         string? CorrelationId);
+
+    private sealed class TestPlanFileReader(
+        PlanFileResult result) : IPlanFileReader
+    {
+        public Task<PlanFileResult> ReadAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(result);
+    }
 
     private sealed class ScriptedStream(
         byte[] readBytes,

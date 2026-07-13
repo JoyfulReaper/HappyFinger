@@ -19,6 +19,7 @@ namespace HappyFinger;
 public class FingerWorker(
     ILogger<FingerWorker> logger,
     IMissionControlClient missionControlClient,
+    IFingerResponseResolver responseResolver,
     IOptions<HappyFingerOptions> options) : BackgroundService
 {
     private TcpListener? _listener;
@@ -171,7 +172,9 @@ public class FingerWorker(
                 remote);
 
             FingerResponse response =
-                StaticResponses.GetResponse(request);
+                await responseResolver.ResolveAsync(
+                    request,
+                    stoppingToken);
 
             responseType = response.Type;
 

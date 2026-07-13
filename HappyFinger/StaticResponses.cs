@@ -278,6 +278,25 @@ public static class StaticResponses
         };
     }
 
+    internal static FingerResponse CreateResponse(
+        string responseType,
+        string content)
+    {
+        string normalized =
+            content.ReplaceLineEndings("\r\n");
+
+        if (!normalized.EndsWith(
+            "\r\n",
+            StringComparison.Ordinal))
+        {
+            normalized += "\r\n";
+        }
+
+        return new FingerResponse(
+            ResponseEncoding.GetBytes(normalized),
+            responseType);
+    }
+
     private static ReadOnlyMemory<byte> Encode(string response) =>
         ResponseEncoding.GetBytes(
             response.ReplaceLineEndings("\r\n"));

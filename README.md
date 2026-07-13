@@ -102,6 +102,10 @@ The default configuration resembles:
     "Port": 79,
     "MaxConcurrentConnections": 64,
     "RequestTimeoutSeconds": 15
+  },
+  "PlanFile": {
+    "Path": "data/.plan",
+    "MaxBytes": 16384
   }
 }
 ```
@@ -114,6 +118,8 @@ The default configuration resembles:
 | `Port`                     |        `79` | TCP port used by the server.                      |
 | `MaxConcurrentConnections` |        `64` | Maximum number of active client connections.      |
 | `RequestTimeoutSeconds`    |        `15` | Time allowed for a client to send a request line. |
+| `PlanFile:Path`            | `data/.plan` | Trusted path for the `now` record `.plan` file.  |
+| `PlanFile:MaxBytes`        |     `16384` | Maximum `.plan` bytes read per request.           |
 
 For a public server, bind to all interfaces:
 
@@ -146,6 +152,29 @@ Verbose Finger queries are accepted only in these forms:
 
 `/Wrong`, `/Whatever`, and `/Wkyle` are ordinary query strings, not verbose
 queries.
+
+## Traditional `.plan` Support
+
+HappyFinger maps the `now` record to a configured traditional `.plan` file.
+Both of these requests read the same configured file:
+
+```text
+now
+/W now
+```
+
+When the file is available, the response begins with `Kyle's Plan`, followed by
+the file contents. If the file is missing, empty, unreadable, or otherwise
+unavailable, HappyFinger safely falls back to the built-in static `now`
+response. The configured maximum read size prevents unbounded file reads; if
+the file is larger than the limit, HappyFinger returns the permitted content and
+adds `[Plan truncated]`.
+
+The `.plan` file path comes only from trusted application configuration. Finger
+queries are never interpreted as filenames. HappyFinger strips unsafe terminal
+control and formatting characters, preserves tabs and line breaks, normalizes
+line endings to CRLF, and never adds plan contents or the configured path to
+Mission Control telemetry.
 
 ## Mission Control Telemetry
 
@@ -450,6 +479,45 @@ sudo systemctl start happyfinger
 sudo systemctl status happyfinger --no-pager
 ```
 
+### Docker Compose `.plan` Mount
+
+For Compose deployments, mount the host `.plan` file read-only and point
+HappyFinger at the container path:
+
+```yaml
+services:
+  happyfinger:
+    environment:
+      PlanFile__Path: /data/.plan
+      PlanFile__MaxBytes: 16384
+    volumes:
+      - ./data/happyfinger/.plan:/data/.plan:ro
+```
+
+The host file must exist before Compose starts:
+
+```bash
+cd /opt/joyful-stack
+
+mkdir -p data/happyfinger
+
+cat > data/happyfinger/.plan <<'EOF'
+Building HappyFinger into a useful public directory.
+Next up: Random Steam Game integration.
+EOF
+```
+
+Then recreate only the HappyFinger container:
+
+```bash
+docker compose up -d \
+  --no-deps \
+  --force-recreate \
+  happyfinger
+```
+
+The container only reads the mounted file; it does not need write access.
+
 ## Troubleshooting
 
 Check service status:
@@ -495,6 +563,7 @@ Common problems:
 ```text
 HappyFinger.slnx
 ├── HappyFinger/
+│   ├── data/
 │   ├── Program.cs
 │   ├── FingerWorker.cs
 │   ├── HappyFingerOptions.cs
