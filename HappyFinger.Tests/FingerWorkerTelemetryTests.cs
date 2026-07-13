@@ -81,6 +81,68 @@ public sealed class FingerWorkerTelemetryTests
     }
 
     [Fact]
+    public async Task HandleConnectionAsync_RandomGamePublishesOnlyControlledTelemetry()
+    {
+        var missionControlClient = new TestMissionControlClient();
+        FingerWorker worker = CreateWorker(
+            missionControlClient,
+            responseResolver: CreateResolver(
+                randomSteamGameResult: new RandomSteamGameResult(
+                    Succeeded: true,
+                    Game: new RandomGameDetails
+                    {
+                        Id = 220,
+                        Name = "Half-Life 2",
+                        PlaytimeForever = 872,
+                        RTimeLastPlayed = 1762204440
+                    })));
+        var stream = new ScriptedStream(
+            Encoding.UTF8.GetBytes("76561198000000000\r\n"));
+
+        await worker.HandleConnectionAsync(
+            connectionId: 1,
+            stream,
+            CreateRemote(),
+            CancellationToken.None);
+
+        var payload = AssertPublishedPayload(missionControlClient);
+        string payloadText = payload.ToString();
+
+        Assert.Equal(FingerResponseTypes.RandomGame, payload.ResponseType);
+        Assert.Equal("served", payload.Outcome);
+        Assert.True(payload.Succeeded);
+        Assert.DoesNotContain("76561198000000000", payloadText);
+        Assert.DoesNotContain("Half-Life", payloadText);
+        Assert.DoesNotContain("220", payloadText);
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_RandomGameUnavailablePublishesServedTelemetry()
+    {
+        var missionControlClient = new TestMissionControlClient();
+        FingerWorker worker = CreateWorker(
+            missionControlClient,
+            responseResolver: CreateResolver(
+                randomSteamGameResult: new RandomSteamGameResult(
+                    Succeeded: false,
+                    Game: null)));
+        var stream = new ScriptedStream(
+            Encoding.UTF8.GetBytes("76561198000000000\r\n"));
+
+        await worker.HandleConnectionAsync(
+            connectionId: 1,
+            stream,
+            CreateRemote(),
+            CancellationToken.None);
+
+        var payload = AssertPublishedPayload(missionControlClient);
+
+        Assert.Equal(FingerResponseTypes.RandomGameUnavailable, payload.ResponseType);
+        Assert.Equal("served", payload.Outcome);
+        Assert.True(payload.Succeeded);
+    }
+
+    [Fact]
     public async Task HandleConnectionAsync_TimeoutBeforeRoutingReportsNone()
     {
         var missionControlClient = new TestMissionControlClient();
@@ -222,14 +284,20 @@ public sealed class FingerWorkerTelemetryTests
                 }));
 
     private static IFingerResponseResolver CreateResolver(
-        PlanFileResult? result = null) =>
+        PlanFileResult? result = null,
+        RandomSteamGameResult? randomSteamGameResult = null) =>
         new FingerResponseResolver(
             new TestPlanFileReader(
                 result ??
                 new PlanFileResult(
                     Available: false,
                     Content: "",
-                    Truncated: false)));
+                    Truncated: false)),
+            new TestRandomSteamGameClient(
+                randomSteamGameResult ??
+                new RandomSteamGameResult(
+                    Succeeded: false,
+                    Game: null)));
 
     private static IPEndPoint CreateRemote() =>
         new(IPAddress.Parse("203.0.113.10"), 54321);
@@ -272,6 +340,15 @@ public sealed class FingerWorkerTelemetryTests
         PlanFileResult result) : IPlanFileReader
     {
         public Task<PlanFileResult> ReadAsync(
+            CancellationToken cancellationToken) =>
+            Task.FromResult(result);
+    }
+
+    private sealed class TestRandomSteamGameClient(
+        RandomSteamGameResult result) : IRandomSteamGameClient
+    {
+        public Task<RandomSteamGameResult> GetRandomGameAsync(
+            long steamId,
             CancellationToken cancellationToken) =>
             Task.FromResult(result);
     }

@@ -9,6 +9,8 @@ public static class FingerResponseTypes
     public const string Projects = "projects";
     public const string Services = "services";
     public const string RandomSteam = "randomsteam";
+    public const string RandomGame = "random-game";
+    public const string RandomGameUnavailable = "random-game-unavailable";
     public const string ReaperShell = "reapershell";
     public const string Help = "help";
     public const string ForwardingNotSupported = "forwarding-not-supported";

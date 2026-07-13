@@ -1,7 +1,8 @@
 namespace HappyFinger;
 
 public sealed class FingerResponseResolver(
-    IPlanFileReader planFileReader) : IFingerResponseResolver
+    IPlanFileReader planFileReader,
+    IRandomSteamGameClient randomSteamGameClient) : IFingerResponseResolver
 {
     public async Task<FingerResponse> ResolveAsync(
         string? request,
@@ -9,6 +10,20 @@ public sealed class FingerResponseResolver(
     {
         FingerQuery query =
             FingerQueryParser.Parse(request);
+
+        if (query.Value.Contains('@'))
+        {
+            return StaticResponses.GetResponse(query);
+        }
+
+        if (SteamIdParser.TryParse(
+            query.Value,
+            out long steamId))
+        {
+            return await ResolveRandomGameAsync(
+                steamId,
+                cancellationToken);
+        }
 
         if (query.Value.Equals(
             "now",
@@ -18,6 +33,23 @@ public sealed class FingerResponseResolver(
         }
 
         return StaticResponses.GetResponse(query);
+    }
+
+    private async Task<FingerResponse> ResolveRandomGameAsync(
+        long steamId,
+        CancellationToken cancellationToken)
+    {
+        RandomSteamGameResult result =
+            await randomSteamGameClient.GetRandomGameAsync(
+                steamId,
+                cancellationToken);
+
+        if (!result.Succeeded || result.Game is null)
+        {
+            return RandomSteamGameResponseFormatter.CreateUnavailableResponse();
+        }
+
+        return RandomSteamGameResponseFormatter.CreateSuccessResponse(result.Game);
     }
 
     private async Task<FingerResponse> ResolvePlanAsync(

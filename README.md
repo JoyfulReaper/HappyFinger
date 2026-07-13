@@ -106,6 +106,10 @@ The default configuration resembles:
   "PlanFile": {
     "Path": "data/.plan",
     "MaxBytes": 16384
+  },
+  "RandomSteamGame": {
+    "BaseUrl": "https://randomsteam.kgivler.com/",
+    "TimeoutSeconds": 5
   }
 }
 ```
@@ -120,6 +124,8 @@ The default configuration resembles:
 | `RequestTimeoutSeconds`    |        `15` | Time allowed for a client to send a request line. |
 | `PlanFile:Path`            | `data/.plan` | Trusted path for the `now` record `.plan` file.  |
 | `PlanFile:MaxBytes`        |     `16384` | Maximum `.plan` bytes read per request.           |
+| `RandomSteamGame:BaseUrl`  | `https://randomsteam.kgivler.com/` | Random Steam Game API base URL. |
+| `RandomSteamGame:TimeoutSeconds` | `5` | Timeout for Random Steam Game API calls.          |
 
 For a public server, bind to all interfaces:
 
@@ -152,6 +158,17 @@ Verbose Finger queries are accepted only in these forms:
 
 `/Wrong`, `/Whatever`, and `/Wkyle` are ordinary query strings, not verbose
 queries.
+
+Pick a random game from a public Steam library with a 17-digit Steam ID:
+
+```bash
+finger 10000000000000000@finger.kgivler.com
+```
+
+The Steam profile and game details must be public. HappyFinger calls the
+configured Random Steam Game API and each request may return a different game.
+If Random Steam Game cannot select a usable game, HappyFinger returns a generic
+unavailable message instead of exposing upstream error details.
 
 ## Traditional `.plan` Support
 
@@ -210,7 +227,17 @@ forwarding-not-supported
 not-found
 joke
 none
+random-game
+random-game-unavailable
 ```
+
+`randomsteam` is the static project-information record. `random-game` means a
+17-digit Steam ID query returned a game. `random-game-unavailable` means the
+Steam ID was valid, but Random Steam Game could not return a usable game.
+
+HappyFinger telemetry does not include Steam IDs, selected game names, Steam app
+IDs, API URLs, response bodies, or profile details. Random Steam Game publishes
+its own detailed game-pick telemetry independently.
 
 Example payload:
 
@@ -490,9 +517,15 @@ services:
     environment:
       PlanFile__Path: /data/.plan
       PlanFile__MaxBytes: 16384
+      RandomSteamGame__BaseUrl: "https://randomsteam.kgivler.com/"
+      RandomSteamGame__TimeoutSeconds: "5"
     volumes:
       - ./data/happyfinger/.plan:/data/.plan:ro
 ```
+
+No additional Docker network or exposed container port is required for the
+initial Random Steam integration because HappyFinger calls the public HTTPS
+endpoint.
 
 The host file must exist before Compose starts:
 

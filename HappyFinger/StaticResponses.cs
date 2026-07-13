@@ -13,15 +13,16 @@ public static class StaticResponses
             """
             HappyFinger Public Directory
 
-            Login         Description
-            ------------  ------------------------------------------
-            kyle          About Kyle Givler
-            now           What Kyle is currently working on
-            projects      Current software projects
-            services      Public services running on this server
-            randomsteam   Random Steam Game project information
-            reapershell   ReaperShell project information
-            help          HappyFinger usage information
+            Login              Description
+            -----------------  ------------------------------------------
+            kyle               About Kyle Givler
+            now                What Kyle is currently working on
+            projects           Current software projects
+            services           Public services running on this server
+            randomsteam        Random Steam Game project information
+            <steam-id>         Pick a random game from a public Steam library
+            reapershell        ReaperShell project information
+            help               HappyFinger usage information
 
             Usage:
               finger <login>@finger.kgivler.com
@@ -177,6 +178,12 @@ public static class StaticResponses
               finger kyle@finger.kgivler.com
               finger projects@finger.kgivler.com
               finger services@finger.kgivler.com
+
+            Pick a random Steam game:
+              finger <17-digit-steam-id>@finger.kgivler.com
+
+            The Steam profile and game details must be public.
+            Each request may return a different game.
 
             Request verbose output:
               finger -l kyle@finger.kgivler.com
