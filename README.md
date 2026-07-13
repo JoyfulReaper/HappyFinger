@@ -137,6 +137,16 @@ Name: Kyle Givler
 Website: https://kgivler.com
 ```
 
+Verbose Finger queries are accepted only in these forms:
+
+```text
+/W
+/W <login>
+```
+
+`/Wrong`, `/Whatever`, and `/Wkyle` are ordinary query strings, not verbose
+queries.
+
 ## Mission Control Telemetry
 
 HappyFinger publishes one `happyfinger.request.completed` event for each handled

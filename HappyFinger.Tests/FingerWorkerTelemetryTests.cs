@@ -13,6 +13,7 @@ public sealed class FingerWorkerTelemetryTests
         { "\r\n", FingerResponseTypes.Directory },
         { "kyle\r\n", FingerResponseTypes.Kyle },
         { "unknown\r\n", FingerResponseTypes.NotFound },
+        { "/Wrong\r\n", FingerResponseTypes.NotFound },
         { "name@host\r\n", FingerResponseTypes.ForwardingNotSupported },
         { "joke\r\n", FingerResponseTypes.Joke }
     };
@@ -39,6 +40,8 @@ public sealed class FingerWorkerTelemetryTests
         Assert.Equal(expectedResponseType, payload.ResponseType);
         Assert.Equal("served", payload.Outcome);
         Assert.True(payload.Succeeded);
+        Assert.Equal(1, stream.WriteCount);
+        Assert.Equal(1, stream.FlushCount);
     }
 
     [Fact]
@@ -225,6 +228,8 @@ public sealed class FingerWorkerTelemetryTests
         private bool _hasRead;
 
         public byte[] WrittenBytes => _written.ToArray();
+        public int FlushCount { get; private set; }
+        public int WriteCount { get; private set; }
         public override bool CanRead => true;
         public override bool CanSeek => false;
         public override bool CanWrite => true;
@@ -238,10 +243,14 @@ public sealed class FingerWorkerTelemetryTests
 
         public override void Flush()
         {
+            FlushCount++;
         }
 
-        public override Task FlushAsync(CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            FlushCount++;
+            return Task.CompletedTask;
+        }
 
         public override int Read(byte[] buffer, int offset, int count) =>
             throw new NotSupportedException();
@@ -280,6 +289,7 @@ public sealed class FingerWorkerTelemetryTests
                 throw throwOnWrite;
             }
 
+            WriteCount++;
             _written.Write(buffer.Span);
             return ValueTask.CompletedTask;
         }

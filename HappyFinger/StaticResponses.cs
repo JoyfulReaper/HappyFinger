@@ -227,37 +227,26 @@ public static class StaticResponses
 
             """);
 
-    public static FingerResponse GetResponse(string? request)
+    public static FingerResponse GetResponse(string? request) =>
+        GetResponse(FingerQueryParser.Parse(request));
+
+    public static FingerResponse GetResponse(FingerQuery query)
     {
-        if (string.IsNullOrWhiteSpace(request))
+        if (query.IsEmpty)
         {
             return new(
                 DirectoryResponseBytes,
                 FingerResponseTypes.Directory);
         }
 
-        string query = request.Trim();
-
-        if (query.StartsWith("/W", StringComparison.OrdinalIgnoreCase))
-        {
-            query = query[2..].Trim();
-        }
-
-        if (query.Length == 0)
-        {
-            return new(
-                DirectoryResponseBytes,
-                FingerResponseTypes.Directory);
-        }
-
-        if (query.Contains('@'))
+        if (query.Value.Contains('@'))
         {
             return new(
                 ForwardingNotSupportedResponseBytes,
                 FingerResponseTypes.ForwardingNotSupported);
         }
 
-        return query.ToLowerInvariant() switch
+        return query.Value.ToLowerInvariant() switch
         {
             "kyle" => new(
                 KyleResponseBytes,

@@ -10,6 +10,10 @@ public sealed class StaticResponsesTests
         { "   ", FingerResponseTypes.Directory, "HappyFinger Public Directory" },
         { "/W", FingerResponseTypes.Directory, "HappyFinger Public Directory" },
         { "/W kyle", FingerResponseTypes.Kyle, "Login: kyle" },
+        { "/W\tkyle", FingerResponseTypes.Kyle, "Login: kyle" },
+        { "/Wrong", FingerResponseTypes.NotFound, "No matching HappyFinger record was found." },
+        { "/Whatever", FingerResponseTypes.NotFound, "No matching HappyFinger record was found." },
+        { "/Wkyle", FingerResponseTypes.NotFound, "No matching HappyFinger record was found." },
         { "kyle", FingerResponseTypes.Kyle, "Login: kyle" },
         { "KYLE", FingerResponseTypes.Kyle, "Login: kyle" },
         { "now", FingerResponseTypes.Now, "Kyle's Current Plan" },
@@ -36,5 +40,17 @@ public sealed class StaticResponsesTests
         Assert.Contains(
             expectedContent,
             Encoding.UTF8.GetString(response.Bytes.Span));
+    }
+
+    [Fact]
+    public void GetResponse_UsesCrLfLineEndingsWithoutBareLf()
+    {
+        FingerResponse response = StaticResponses.GetResponse("kyle");
+        string text = Encoding.UTF8.GetString(response.Bytes.Span);
+
+        Assert.Contains("\r\n", text);
+        Assert.DoesNotContain(
+            "\n",
+            text.Replace("\r\n", string.Empty));
     }
 }
