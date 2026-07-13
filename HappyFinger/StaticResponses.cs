@@ -227,11 +227,13 @@ public static class StaticResponses
 
             """);
 
-    public static ReadOnlyMemory<byte> GetResponse(string? request)
+    public static FingerResponse GetResponse(string? request)
     {
         if (string.IsNullOrWhiteSpace(request))
         {
-            return DirectoryResponseBytes;
+            return new(
+                DirectoryResponseBytes,
+                FingerResponseTypes.Directory);
         }
 
         string query = request.Trim();
@@ -243,25 +245,47 @@ public static class StaticResponses
 
         if (query.Length == 0)
         {
-            return DirectoryResponseBytes;
+            return new(
+                DirectoryResponseBytes,
+                FingerResponseTypes.Directory);
         }
 
         if (query.Contains('@'))
         {
-            return ForwardingNotSupportedResponseBytes;
+            return new(
+                ForwardingNotSupportedResponseBytes,
+                FingerResponseTypes.ForwardingNotSupported);
         }
 
         return query.ToLowerInvariant() switch
         {
-            "kyle" => KyleResponseBytes,
-            "now" => NowResponseBytes,
-            "projects" => ProjectsResponseBytes,
-            "services" => ServicesResponseBytes,
-            "randomsteam" => RandomSteamResponseBytes,
-            "reapershell" => ReaperShellResponseBytes,
-            "help" => HelpResponseBytes,
-            "joke" => JokeResponseBytes,
-            _ => NotFoundResponseBytes
+            "kyle" => new(
+                KyleResponseBytes,
+                FingerResponseTypes.Kyle),
+            "now" => new(
+                NowResponseBytes,
+                FingerResponseTypes.Now),
+            "projects" => new(
+                ProjectsResponseBytes,
+                FingerResponseTypes.Projects),
+            "services" => new(
+                ServicesResponseBytes,
+                FingerResponseTypes.Services),
+            "randomsteam" => new(
+                RandomSteamResponseBytes,
+                FingerResponseTypes.RandomSteam),
+            "reapershell" => new(
+                ReaperShellResponseBytes,
+                FingerResponseTypes.ReaperShell),
+            "help" => new(
+                HelpResponseBytes,
+                FingerResponseTypes.Help),
+            "joke" => new(
+                JokeResponseBytes,
+                FingerResponseTypes.Joke),
+            _ => new(
+                NotFoundResponseBytes,
+                FingerResponseTypes.NotFound)
         };
     }
 
