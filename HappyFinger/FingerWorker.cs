@@ -124,11 +124,13 @@ public class FingerWorker(
         bool succeeded = false;
         bool shouldPublish = true;
 
+        string remoteString = "unknown";
+
         using (client)
         {
             client.NoDelay = true;
             EndPoint? remote = client.Client.RemoteEndPoint;
-
+            remoteString = remote?.ToString() ?? "unknown";
             try
             {
                 await using NetworkStream stream = client.GetStream();
@@ -212,37 +214,37 @@ public class FingerWorker(
                     connectionId,
                     remote);
             }
-            stopwatch.Stop();
+        }
+        stopwatch.Stop();
 
-            if (!shouldPublish)
-            {
-                return;
-            }
+        if (!shouldPublish)
+        {
+            return;
+        }
 
-            try
-            {
-                await missionControlClient.TryPublishAsync(
-                    eventType: "happyfinger.request.completed",
-                    payload: new FingerRequestCompletedEvent(
-                        RequestReceived: requestReceived,
-                        RequestLength: requestLength,
-                        Remote: remote?.ToString() ?? "unknown",
-                        DurationMilliseconds: stopwatch.ElapsedMilliseconds,
-                        Outcome: outcome,
-                        Succeeded: succeeded),
-                    occurredAt: occurredAt,
-                    correlationId: correlationId,
-                    cancellationToken: stoppingToken);
-            }
-            catch (Exception exception)
-            {
-                // IMissionControlClient is supposed to be best-effort, but this
-                // protects HappyFinger from custom or test implementations that throw.
-                logger.LogWarning(
-                    exception,
-                    "Failed to publish Mission Control event for connection {ConnectionId}.",
-                    connectionId);
-            }
+        try
+        {
+            await missionControlClient.TryPublishAsync(
+                eventType: "happyfinger.request.completed",
+                payload: new FingerRequestCompletedEvent(
+                    RequestReceived: requestReceived,
+                    RequestLength: requestLength,
+                    Remote: remoteString,
+                    DurationMilliseconds: stopwatch.ElapsedMilliseconds,
+                    Outcome: outcome,
+                    Succeeded: succeeded),
+                occurredAt: occurredAt,
+                correlationId: correlationId,
+                cancellationToken: stoppingToken);
+        }
+        catch (Exception exception)
+        {
+            // IMissionControlClient is supposed to be best-effort, but this
+            // protects HappyFinger from custom or test implementations that throw.
+            logger.LogWarning(
+                exception,
+                "Failed to publish Mission Control event for connection {ConnectionId}.",
+                connectionId);
         }
     }
 
