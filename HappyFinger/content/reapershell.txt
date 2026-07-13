@@ -1,0 +1,19 @@
+Project: ReaperShell
+
+A local .NET shell with scripting and extensible command packs.
+
+Features:
+  - Custom shell commands
+  - Script execution
+  - Plugin discovery
+  - C# command packs
+  - F# command packs
+  - VB.NET command packs
+  - Unix-inspired built-in commands
+
+Source:
+  https://github.com/JoyfulReaper/ReaperShell
+
+Status:
+  Experimental and under active development.
+

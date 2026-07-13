@@ -2,8 +2,12 @@ namespace HappyFinger;
 
 public sealed class FingerResponseResolver(
     IPlanFileReader planFileReader,
-    IRandomSteamGameClient randomSteamGameClient) : IFingerResponseResolver
+    IRandomSteamGameClient randomSteamGameClient,
+    IFingerContentProvider contentProvider) : IFingerResponseResolver
 {
+    private const string EmergencyFallback =
+        "HappyFinger content is temporarily unavailable.";
+
     public async Task<FingerResponse> ResolveAsync(
         string? request,
         CancellationToken cancellationToken)
@@ -13,7 +17,10 @@ public sealed class FingerResponseResolver(
 
         if (query.Value.Contains('@'))
         {
-            return StaticResponses.GetResponse(query);
+            return await CreateContentResponseAsync(
+                FingerContentKey.ForwardingNotSupported,
+                FingerResponseTypes.ForwardingNotSupported,
+                cancellationToken);
         }
 
         if (SteamIdParser.TryParse(
@@ -32,7 +39,9 @@ public sealed class FingerResponseResolver(
             return await ResolvePlanAsync(cancellationToken);
         }
 
-        return StaticResponses.GetResponse(query);
+        return await ResolveStaticContentAsync(
+            query,
+            cancellationToken);
     }
 
     private async Task<FingerResponse> ResolveRandomGameAsync(
@@ -46,7 +55,10 @@ public sealed class FingerResponseResolver(
 
         if (!result.Succeeded || result.Game is null)
         {
-            return RandomSteamGameResponseFormatter.CreateUnavailableResponse();
+            return await CreateContentResponseAsync(
+                FingerContentKey.RandomGameUnavailable,
+                FingerResponseTypes.RandomGameUnavailable,
+                cancellationToken);
         }
 
         return RandomSteamGameResponseFormatter.CreateSuccessResponse(result.Game);
@@ -60,10 +72,10 @@ public sealed class FingerResponseResolver(
 
         if (!result.Available)
         {
-            return StaticResponses.GetResponse(
-                new FingerQuery(
-                    Value: FingerResponseTypes.Now,
-                    Verbose: false));
+            return await CreateContentResponseAsync(
+                FingerContentKey.NowFallback,
+                FingerResponseTypes.Now,
+                cancellationToken);
         }
 
         string content = $"Kyle's Plan\r\n\r\n{result.Content}";
@@ -73,8 +85,70 @@ public sealed class FingerResponseResolver(
             content += "\r\n\r\n[Plan truncated]";
         }
 
-        return StaticResponses.CreateResponse(
+        return FingerResponseFactory.Create(
             FingerResponseTypes.Now,
             content);
+    }
+
+    private Task<FingerResponse> ResolveStaticContentAsync(
+        FingerQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (query.IsEmpty)
+        {
+            return CreateContentResponseAsync(
+                FingerContentKey.Directory,
+                FingerResponseTypes.Directory,
+                cancellationToken);
+        }
+
+        return query.Value.ToLowerInvariant() switch
+        {
+            "kyle" => CreateContentResponseAsync(
+                FingerContentKey.Kyle,
+                FingerResponseTypes.Kyle,
+                cancellationToken),
+            "projects" => CreateContentResponseAsync(
+                FingerContentKey.Projects,
+                FingerResponseTypes.Projects,
+                cancellationToken),
+            "services" => CreateContentResponseAsync(
+                FingerContentKey.Services,
+                FingerResponseTypes.Services,
+                cancellationToken),
+            "randomsteam" => CreateContentResponseAsync(
+                FingerContentKey.RandomSteam,
+                FingerResponseTypes.RandomSteam,
+                cancellationToken),
+            "reapershell" => CreateContentResponseAsync(
+                FingerContentKey.ReaperShell,
+                FingerResponseTypes.ReaperShell,
+                cancellationToken),
+            "help" => CreateContentResponseAsync(
+                FingerContentKey.Help,
+                FingerResponseTypes.Help,
+                cancellationToken),
+            "joke" => CreateContentResponseAsync(
+                FingerContentKey.Joke,
+                FingerResponseTypes.Joke,
+                cancellationToken),
+            _ => CreateContentResponseAsync(
+                FingerContentKey.NotFound,
+                FingerResponseTypes.NotFound,
+                cancellationToken)
+        };
+    }
+
+    private async Task<FingerResponse> CreateContentResponseAsync(
+        FingerContentKey key,
+        string responseType,
+        CancellationToken cancellationToken)
+    {
+        FingerContentResult result =
+            await contentProvider.GetAsync(key, cancellationToken);
+
+        return FingerResponseFactory.Create(
+            responseType,
+            result.Available ? result.Content : EmergencyFallback);
     }
 }

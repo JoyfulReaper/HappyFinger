@@ -218,7 +218,7 @@ public sealed class FingerWorkerTelemetryTests
             CancellationToken.None);
 
         Assert.Contains(
-            "Login: kyle",
+            "Kyle content",
             Encoding.UTF8.GetString(stream.WrittenBytes));
     }
 
@@ -297,7 +297,8 @@ public sealed class FingerWorkerTelemetryTests
                 randomSteamGameResult ??
                 new RandomSteamGameResult(
                     Succeeded: false,
-                    Game: null)));
+                    Game: null)),
+            new TestContentProvider());
 
     private static IPEndPoint CreateRemote() =>
         new(IPAddress.Parse("203.0.113.10"), 54321);
@@ -351,6 +352,19 @@ public sealed class FingerWorkerTelemetryTests
             long steamId,
             CancellationToken cancellationToken) =>
             Task.FromResult(result);
+    }
+
+    private sealed class TestContentProvider : IFingerContentProvider
+    {
+        public Task<FingerContentResult> GetAsync(
+            FingerContentKey key,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                new FingerContentResult(
+                    Available: true,
+                    Content: $"{key} content",
+                    UsedOverride: false,
+                    Truncated: false));
     }
 
     private sealed class ScriptedStream(

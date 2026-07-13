@@ -1,0 +1,19 @@
+Current Projects
+
+Random Steam Game
+  A fast random game picker for large Steam libraries.
+
+ReaperShell
+  A .NET shell with scripting and multi-language command packs.
+
+Happy Protocol Servers
+  Small implementations of classic Internet protocols including
+  Finger, Gopher, and Echo.
+
+RimWorld Mods
+  Performance improvements, compatibility fixes, and modding
+  framework experiments.
+
+More:
+  https://github.com/JoyfulReaper
+

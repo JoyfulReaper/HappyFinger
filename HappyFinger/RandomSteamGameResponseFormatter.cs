@@ -29,24 +29,10 @@ internal static class RandomSteamGameResponseFormatter
         builder.AppendLine("Pick another:");
         builder.AppendLine("  finger <steamId>@finger.kgivler.com");
 
-        return StaticResponses.CreateResponse(
+        return FingerResponseFactory.Create(
             FingerResponseTypes.RandomGame,
             builder.ToString());
     }
-
-    public static FingerResponse CreateUnavailableResponse() =>
-        StaticResponses.CreateResponse(
-            FingerResponseTypes.RandomGameUnavailable,
-            """
-            Random Steam Game
-
-            A random game could not be selected.
-
-            The Steam profile may be private, the library may be empty, or
-            Random Steam Game may be temporarily unavailable.
-
-            Verify that the Steam profile and game details are public, then try again.
-            """);
 
     internal static string FormatPlaytime(int minutes) =>
         minutes switch

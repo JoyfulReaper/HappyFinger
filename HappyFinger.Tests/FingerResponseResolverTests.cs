@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using System.Text;
 
 namespace HappyFinger.Tests;
@@ -25,7 +27,8 @@ public sealed class FingerResponseResolverTests
         var randomSteamGameClient = new TestRandomSteamGameClient();
         var resolver = new FingerResponseResolver(
             reader,
-            randomSteamGameClient);
+            randomSteamGameClient,
+            new TestContentProvider());
 
         FingerResponse response =
             await resolver.ResolveAsync(request, CancellationToken.None);
@@ -48,7 +51,8 @@ public sealed class FingerResponseResolverTests
                     Available: true,
                     Content: "short plan",
                     Truncated: true)),
-            new TestRandomSteamGameClient());
+            new TestRandomSteamGameClient(),
+            new TestContentProvider());
 
         FingerResponse response =
             await resolver.ResolveAsync("now", CancellationToken.None);
@@ -60,27 +64,75 @@ public sealed class FingerResponseResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_ReturnsStaticNowResponseWhenPlanIsUnavailable()
+    public async Task ResolveAsync_ReturnsNowFallbackContentWhenPlanIsUnavailable()
     {
         var resolver = new FingerResponseResolver(
-            new TestPlanFileReader(
-                new PlanFileResult(
-                    Available: false,
-                    Content: "",
-                    Truncated: false)),
-            new TestRandomSteamGameClient());
+            new TestPlanFileReader(UnavailablePlan),
+            new TestRandomSteamGameClient(),
+            new TestContentProvider(
+                new Dictionary<FingerContentKey, string>
+                {
+                    [FingerContentKey.NowFallback] = "fallback now"
+                }));
 
         FingerResponse response =
             await resolver.ResolveAsync("now", CancellationToken.None);
 
         string content = Encoding.UTF8.GetString(response.Bytes.Span);
         Assert.Equal(FingerResponseTypes.Now, response.Type);
-        Assert.Contains("Kyle's Current Plan", content);
+        Assert.Contains("fallback now", content);
         Assert.DoesNotContain("Kyle's Plan\r\n\r\n", content);
     }
 
+    public static TheoryData<string?, string, string> StaticRoutes => new()
+    {
+        { "", FingerResponseTypes.Directory, "directory content" },
+        { "   ", FingerResponseTypes.Directory, "directory content" },
+        { "/W", FingerResponseTypes.Directory, "directory content" },
+        { "/W kyle", FingerResponseTypes.Kyle, "kyle content" },
+        { "/W\tkyle", FingerResponseTypes.Kyle, "kyle content" },
+        { "/Wrong", FingerResponseTypes.NotFound, "not-found content" },
+        { "/Whatever", FingerResponseTypes.NotFound, "not-found content" },
+        { "/Wkyle", FingerResponseTypes.NotFound, "not-found content" },
+        { "kyle", FingerResponseTypes.Kyle, "kyle content" },
+        { "KYLE", FingerResponseTypes.Kyle, "kyle content" },
+        { "projects", FingerResponseTypes.Projects, "projects content" },
+        { "services", FingerResponseTypes.Services, "services content" },
+        { "randomsteam", FingerResponseTypes.RandomSteam, "randomsteam content" },
+        { "reapershell", FingerResponseTypes.ReaperShell, "reapershell content" },
+        { "help", FingerResponseTypes.Help, "help content" },
+        { "joke", FingerResponseTypes.Joke, "joke content" },
+        { "user@example.com", FingerResponseTypes.ForwardingNotSupported, "forwarding-not-supported content" },
+        { "unknown", FingerResponseTypes.NotFound, "not-found content" }
+    };
+
+    [Theory]
+    [MemberData(nameof(StaticRoutes))]
+    public async Task ResolveAsync_ReturnsExpectedFileBackedStaticRoute(
+        string? request,
+        string expectedType,
+        string expectedContent)
+    {
+        var resolver = new FingerResponseResolver(
+            new TestPlanFileReader(
+                new PlanFileResult(
+                    Available: true,
+                    Content: "not used",
+                    Truncated: false)),
+            new TestRandomSteamGameClient(),
+            new TestContentProvider());
+
+        FingerResponse response =
+            await resolver.ResolveAsync(request, CancellationToken.None);
+
+        Assert.Equal(expectedType, response.Type);
+        Assert.Contains(
+            expectedContent,
+            Encoding.UTF8.GetString(response.Bytes.Span));
+    }
+
     [Fact]
-    public async Task ResolveAsync_ReusesStaticResponsesForNonNowRoutes()
+    public async Task ResolveAsync_DoesNotReadPlanOrRandomSteamClientForStaticRoutes()
     {
         var reader = new TestPlanFileReader(
             new PlanFileResult(
@@ -90,7 +142,8 @@ public sealed class FingerResponseResolverTests
         var randomSteamGameClient = new TestRandomSteamGameClient();
         var resolver = new FingerResponseResolver(
             reader,
-            randomSteamGameClient);
+            randomSteamGameClient,
+            new TestContentProvider());
 
         FingerResponse response =
             await resolver.ResolveAsync("kyle", CancellationToken.None);
@@ -125,7 +178,8 @@ public sealed class FingerResponseResolverTests
                 }));
         var resolver = new FingerResponseResolver(
             new TestPlanFileReader(UnavailablePlan),
-            randomSteamGameClient);
+            randomSteamGameClient,
+            new TestContentProvider());
 
         FingerResponse response =
             await resolver.ResolveAsync(request, CancellationToken.None);
@@ -151,7 +205,8 @@ public sealed class FingerResponseResolverTests
         var randomSteamGameClient = new TestRandomSteamGameClient();
         var resolver = new FingerResponseResolver(
             new TestPlanFileReader(UnavailablePlan),
-            randomSteamGameClient);
+            randomSteamGameClient,
+            new TestContentProvider());
 
         FingerResponse response =
             await resolver.ResolveAsync("randomsteam", CancellationToken.None);
@@ -175,7 +230,8 @@ public sealed class FingerResponseResolverTests
         var randomSteamGameClient = new TestRandomSteamGameClient();
         var resolver = new FingerResponseResolver(
             new TestPlanFileReader(UnavailablePlan),
-            randomSteamGameClient);
+            randomSteamGameClient,
+            new TestContentProvider());
 
         FingerResponse response =
             await resolver.ResolveAsync(request, CancellationToken.None);
@@ -190,7 +246,8 @@ public sealed class FingerResponseResolverTests
         var randomSteamGameClient = new TestRandomSteamGameClient();
         var resolver = new FingerResponseResolver(
             new TestPlanFileReader(UnavailablePlan),
-            randomSteamGameClient);
+            randomSteamGameClient,
+            new TestContentProvider());
 
         FingerResponse response =
             await resolver.ResolveAsync(
@@ -202,22 +259,95 @@ public sealed class FingerResponseResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_UnavailableRandomSteamGameReturnsGenericMessage()
+    public async Task ResolveAsync_UnavailableRandomSteamGameReturnsContentFile()
     {
         var resolver = new FingerResponseResolver(
             new TestPlanFileReader(UnavailablePlan),
             new TestRandomSteamGameClient(
                 new RandomSteamGameResult(
                     Succeeded: false,
-                    Game: null)));
+                    Game: null)),
+            new TestContentProvider(
+                new Dictionary<FingerContentKey, string>
+                {
+                    [FingerContentKey.RandomGameUnavailable] = "unavailable from file"
+                }));
 
         FingerResponse response =
             await resolver.ResolveAsync("76561198000000000", CancellationToken.None);
 
         string content = Encoding.UTF8.GetString(response.Bytes.Span);
         Assert.Equal(FingerResponseTypes.RandomGameUnavailable, response.Type);
-        Assert.Contains("A random game could not be selected.", content);
+        Assert.Contains("unavailable from file", content);
         Assert.DoesNotContain("76561198000000000", content);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_UsesEmergencyContentWhenContentFileIsUnavailable()
+    {
+        var resolver = new FingerResponseResolver(
+            new TestPlanFileReader(UnavailablePlan),
+            new TestRandomSteamGameClient(),
+            new TestContentProvider(new Dictionary<FingerContentKey, string>()));
+
+        FingerResponse response =
+            await resolver.ResolveAsync("help", CancellationToken.None);
+
+        string content = Encoding.UTF8.GetString(response.Bytes.Span);
+        Assert.Equal(FingerResponseTypes.Help, response.Type);
+        Assert.Contains("HappyFinger content is temporarily unavailable.", content);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ReadsEditedOverrideContentOnNextRequest()
+    {
+        string root = Path.Combine(
+            Path.GetTempPath(),
+            "HappyFinger.Tests",
+            Guid.NewGuid().ToString("N"));
+        string packaged = Path.Combine(root, "packaged");
+        string overrides = Path.Combine(root, "records");
+        Directory.CreateDirectory(packaged);
+        Directory.CreateDirectory(overrides);
+
+        try
+        {
+            string fileName = FingerContentFileNames.GetFileName(FingerContentKey.Kyle);
+            await File.WriteAllTextAsync(Path.Combine(packaged, fileName), "packaged");
+            await File.WriteAllTextAsync(Path.Combine(overrides, fileName), "first");
+
+            var provider = new FileFingerContentProvider(
+                Options.Create(
+                    new FingerContentOptions
+                    {
+                        OverrideDirectory = overrides,
+                        MaxBytes = 16 * 1024
+                    }),
+                NullLogger<FileFingerContentProvider>.Instance,
+                packaged);
+            var resolver = new FingerResponseResolver(
+                new TestPlanFileReader(UnavailablePlan),
+                new TestRandomSteamGameClient(),
+                provider);
+
+            FingerResponse first =
+                await resolver.ResolveAsync("kyle", CancellationToken.None);
+
+            await File.WriteAllTextAsync(Path.Combine(overrides, fileName), "second");
+
+            FingerResponse second =
+                await resolver.ResolveAsync("kyle", CancellationToken.None);
+
+            Assert.Contains("first", Encoding.UTF8.GetString(first.Bytes.Span));
+            Assert.Contains("second", Encoding.UTF8.GetString(second.Bytes.Span));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     private static readonly PlanFileResult UnavailablePlan =
@@ -258,6 +388,50 @@ public sealed class FingerResponseResolverTests
             CallCount++;
             SteamIds.Add(steamId);
             return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class TestContentProvider(
+        IReadOnlyDictionary<FingerContentKey, string>? content = null) : IFingerContentProvider
+    {
+        private readonly IReadOnlyDictionary<FingerContentKey, string> _content =
+            content ??
+            new Dictionary<FingerContentKey, string>
+            {
+                [FingerContentKey.Directory] = "directory content",
+                [FingerContentKey.Kyle] = "kyle content",
+                [FingerContentKey.Projects] = "projects content",
+                [FingerContentKey.Services] = "services content",
+                [FingerContentKey.RandomSteam] = "randomsteam content",
+                [FingerContentKey.ReaperShell] = "reapershell content",
+                [FingerContentKey.Help] = "help content",
+                [FingerContentKey.Joke] = "joke content",
+                [FingerContentKey.NotFound] = "not-found content",
+                [FingerContentKey.ForwardingNotSupported] = "forwarding-not-supported content",
+                [FingerContentKey.NowFallback] = "now fallback content",
+                [FingerContentKey.RandomGameUnavailable] = "random game unavailable content"
+            };
+
+        public Task<FingerContentResult> GetAsync(
+            FingerContentKey key,
+            CancellationToken cancellationToken)
+        {
+            if (!_content.TryGetValue(key, out string? value))
+            {
+                return Task.FromResult(
+                    new FingerContentResult(
+                        Available: false,
+                        Content: "",
+                        UsedOverride: false,
+                        Truncated: false));
+            }
+
+            return Task.FromResult(
+                new FingerContentResult(
+                    Available: true,
+                    Content: value,
+                    UsedOverride: false,
+                    Truncated: false));
         }
     }
 }

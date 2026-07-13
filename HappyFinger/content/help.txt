@@ -1,0 +1,33 @@
+HappyFinger Help
+
+Query the public directory:
+  finger @finger.kgivler.com
+
+Query a specific record:
+  finger kyle@finger.kgivler.com
+  finger now@finger.kgivler.com
+  finger projects@finger.kgivler.com
+  finger services@finger.kgivler.com
+
+The now record reads the configured traditional .plan file.
+
+Pick a random Steam game:
+  finger <17-digit-steam-id>@finger.kgivler.com
+
+The Steam profile and game details must be public.
+Each request may return a different game.
+
+Request verbose output:
+  finger -l kyle@finger.kgivler.com
+
+Available records:
+  kyle
+  now
+  projects
+  services
+  randomsteam
+  reapershell
+  help
+
+Finger request forwarding is not supported.
+

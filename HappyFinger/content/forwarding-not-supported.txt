@@ -1,0 +1,11 @@
+Finger request forwarding is not supported.
+
+Query one of the local HappyFinger records instead:
+  kyle
+  now
+  projects
+  services
+  randomsteam
+  reapershell
+  help
+

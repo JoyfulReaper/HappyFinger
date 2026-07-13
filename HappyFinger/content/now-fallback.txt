@@ -1,0 +1,13 @@
+Kyle's Current Plan
+
+Recently completed:
+  - Migrated VPS services from systemd to Docker
+  - Added Mission Control telemetry
+  - Added Uptime Kuma telemetry filtering
+  - Made HappyFinger useful beyond one joke
+
+Currently working on:
+  - Building a public Finger directory
+  - Adding useful Finger records
+  - Planning support for a traditional .plan file
+
