@@ -22,14 +22,21 @@ Current behavior:
 * Limits concurrent connections
 * Enforces a request timeout
 * Reads a single request line ending in `\n` or `\r\n`
-* Responds with a fixed text message
+* Responds with fixed directory and profile-style text records
 * Can run from the console during development
 * Includes Windows Service support through .NET hosting
 
-The current response is intentionally simple:
+The current responses are intentionally simple records such as:
 
 ```text
-You fingered me! How dare you!
+HappyFinger Public Directory
+
+Login         Description
+------------  ------------------------------------------
+kyle          About Kyle Givler
+now           What Kyle is currently working on
+projects      Current software projects
+services      Public services running on this server
 ```
 
 Future versions may serve profile text, project status, GitHub activity, uptime, or other small public status information.
@@ -95,6 +102,14 @@ The default configuration resembles:
     "Port": 79,
     "MaxConcurrentConnections": 64,
     "RequestTimeoutSeconds": 15
+  },
+  "PlanFile": {
+    "Path": "data/.plan",
+    "MaxBytes": 16384
+  },
+  "RandomSteamGame": {
+    "BaseUrl": "https://randomsteam.kgivler.com/",
+    "TimeoutSeconds": 5
   }
 }
 ```
@@ -107,6 +122,10 @@ The default configuration resembles:
 | `Port`                     |        `79` | TCP port used by the server.                      |
 | `MaxConcurrentConnections` |        `64` | Maximum number of active client connections.      |
 | `RequestTimeoutSeconds`    |        `15` | Time allowed for a client to send a request line. |
+| `PlanFile:Path`            | `data/.plan` | Trusted path for the `now` record `.plan` file.  |
+| `PlanFile:MaxBytes`        |     `16384` | Maximum `.plan` bytes read per request.           |
+| `RandomSteamGame:BaseUrl`  | `https://randomsteam.kgivler.com/` | Random Steam Game API base URL. |
+| `RandomSteamGame:TimeoutSeconds` | `5` | Timeout for Random Steam Game API calls.          |
 
 For a public server, bind to all interfaces:
 
@@ -125,7 +144,113 @@ printf "kyle\r\n" | nc 127.0.0.1 79
 Expected response:
 
 ```text
-You fingered me! How dare you!
+Login: kyle
+Name: Kyle Givler
+Website: https://kgivler.com
+```
+
+Verbose Finger queries are accepted only in these forms:
+
+```text
+/W
+/W <login>
+```
+
+`/Wrong`, `/Whatever`, and `/Wkyle` are ordinary query strings, not verbose
+queries.
+
+Pick a random game from a public Steam library with a 17-digit Steam ID:
+
+```bash
+finger 10000000000000000@finger.kgivler.com
+```
+
+The Steam profile and game details must be public. HappyFinger calls the
+configured Random Steam Game API and each request may return a different game.
+If Random Steam Game cannot select a usable game, HappyFinger returns a generic
+unavailable message instead of exposing upstream error details.
+
+## Traditional `.plan` Support
+
+HappyFinger maps the `now` record to a configured traditional `.plan` file.
+Both of these requests read the same configured file:
+
+```text
+now
+/W now
+```
+
+When the file is available, the response begins with `Kyle's Plan`, followed by
+the file contents. If the file is missing, empty, unreadable, or otherwise
+unavailable, HappyFinger safely falls back to the built-in static `now`
+response. The configured maximum read size prevents unbounded file reads; if
+the file is larger than the limit, HappyFinger returns the permitted content and
+adds `[Plan truncated]`.
+
+The `.plan` file path comes only from trusted application configuration. Finger
+queries are never interpreted as filenames. HappyFinger strips unsafe terminal
+control and formatting characters, preserves tabs and line breaks, normalizes
+line endings to CRLF, and never adds plan contents or the configured path to
+Mission Control telemetry.
+
+## Mission Control Telemetry
+
+HappyFinger publishes one `happyfinger.request.completed` event for each handled
+request, except application shutdown cases and the configured Uptime Kuma
+monitoring address.
+
+Payload fields:
+
+| Field                  | Description                                                   |
+| ---------------------- | ------------------------------------------------------------- |
+| `requestReceived`      | Whether a Finger request was read before processing ended.    |
+| `requestLength`        | Length of the request line after trimming trailing newlines.  |
+| `remote`               | Remote endpoint string for operational diagnostics.           |
+| `responseType`         | Predefined response selected by HappyFinger.                  |
+| `durationMilliseconds` | Time spent handling the connection.                           |
+| `outcome`              | Controlled processing outcome such as `served` or `timeout`.  |
+| `succeeded`            | Whether the request was successfully served.                  |
+
+`responseType` is a controlled telemetry value, not raw user input. Allowed
+values are:
+
+```text
+directory
+kyle
+now
+projects
+services
+randomsteam
+reapershell
+help
+forwarding-not-supported
+not-found
+joke
+none
+random-game
+random-game-unavailable
+```
+
+`randomsteam` is the static project-information record. `random-game` means a
+17-digit Steam ID query returned a game. `random-game-unavailable` means the
+Steam ID was valid, but Random Steam Game could not return a usable game.
+
+HappyFinger telemetry does not include Steam IDs, selected game names, Steam app
+IDs, API URLs, response bodies, or profile details. Random Steam Game publishes
+its own detailed game-pick telemetry independently.
+
+Example payload:
+
+```json
+{
+  "requestReceived": true,
+  "requestLength": 4,
+  "remote": "203.0.113.10:54321",
+  "responseType": "kyle",
+  "durationMilliseconds": 3,
+  "outcome": "served",
+  "succeeded": true
+}
 ```
 
 From PowerShell, you can test with raw TCP:
@@ -381,6 +506,51 @@ sudo systemctl start happyfinger
 sudo systemctl status happyfinger --no-pager
 ```
 
+### Docker Compose `.plan` Mount
+
+For Compose deployments, mount the host `.plan` file read-only and point
+HappyFinger at the container path:
+
+```yaml
+services:
+  happyfinger:
+    environment:
+      PlanFile__Path: /data/.plan
+      PlanFile__MaxBytes: 16384
+      RandomSteamGame__BaseUrl: "https://randomsteam.kgivler.com/"
+      RandomSteamGame__TimeoutSeconds: "5"
+    volumes:
+      - ./data/happyfinger/.plan:/data/.plan:ro
+```
+
+No additional Docker network or exposed container port is required for the
+initial Random Steam integration because HappyFinger calls the public HTTPS
+endpoint.
+
+The host file must exist before Compose starts:
+
+```bash
+cd /opt/joyful-stack
+
+mkdir -p data/happyfinger
+
+cat > data/happyfinger/.plan <<'EOF'
+Building HappyFinger into a useful public directory.
+Next up: Random Steam Game integration.
+EOF
+```
+
+Then recreate only the HappyFinger container:
+
+```bash
+docker compose up -d \
+  --no-deps \
+  --force-recreate \
+  happyfinger
+```
+
+The container only reads the mounted file; it does not need write access.
+
 ## Troubleshooting
 
 Check service status:
@@ -414,7 +584,7 @@ Common problems:
 
 ## Current Limitations
 
-* Fixed response only
+* Fixed response records only
 * No per-user profile lookup yet
 * No dynamic project/status output yet
 * No authentication or access control
@@ -426,6 +596,7 @@ Common problems:
 ```text
 HappyFinger.slnx
 ├── HappyFinger/
+│   ├── data/
 │   ├── Program.cs
 │   ├── FingerWorker.cs
 │   ├── HappyFingerOptions.cs

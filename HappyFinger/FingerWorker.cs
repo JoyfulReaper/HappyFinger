@@ -19,6 +19,7 @@ namespace HappyFinger;
 public class FingerWorker(
     ILogger<FingerWorker> logger,
     IMissionControlClient missionControlClient,
+    IFingerResponseResolver responseResolver,
     IOptions<HappyFingerOptions> options) : BackgroundService
 {
     private TcpListener? _listener;
@@ -32,9 +33,6 @@ public class FingerWorker(
     private static readonly Encoding RequestEncoding = new UTF8Encoding(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: false);
-
-    private static readonly ReadOnlyMemory<byte> ResponseBytes =
-        RequestEncoding.GetBytes("You fingered me! How dare you!\r\n");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -114,122 +112,140 @@ public class FingerWorker(
         TcpClient client,
         CancellationToken stoppingToken)
     {
+        using (client)
+        {
+            client.NoDelay = true;
+            await using NetworkStream stream = client.GetStream();
+
+            await HandleConnectionAsync(
+                connectionId,
+                stream,
+                client.Client.RemoteEndPoint,
+                stoppingToken);
+        }
+    }
+
+    internal async Task HandleConnectionAsync(
+        long connectionId,
+        Stream stream,
+        EndPoint? remote,
+        CancellationToken stoppingToken)
+    {
         var occurredAt = DateTimeOffset.UtcNow;
         var stopwatch = Stopwatch.StartNew();
         var correlationId = Guid.NewGuid().ToString("N");
 
         bool requestReceived = false;
         int requestLength = 0;
+        string responseType = FingerResponseTypes.None;
         string outcome = "failed";
         bool succeeded = false;
         bool shouldPublish = true;
 
-        string remoteString = "unknown";
-        bool isIgnoredTelemetrySource;
+        string remoteString = remote?.ToString() ?? "unknown";
+        var remoteAddress = (remote as IPEndPoint)?
+            .Address
+            .MapToIPv4()
+            .ToString();
 
-        using (client)
+        bool isIgnoredTelemetrySource =
+            !string.IsNullOrWhiteSpace(
+                options.Value.TelemetryIgnoredRemoteAddress) &&
+            string.Equals(
+                remoteAddress,
+                options.Value.TelemetryIgnoredRemoteAddress,
+                StringComparison.OrdinalIgnoreCase);
+
+        try
         {
-            client.NoDelay = true;
-            EndPoint? remote = client.Client.RemoteEndPoint;
-            remoteString = remote?.ToString() ?? "unknown";
+            string? request = await ReadAsync(stream, options.Value.RequestTimeoutSeconds, stoppingToken);
 
-            var remoteAddress = (remote as IPEndPoint)?
-                .Address
-                .MapToIPv4()
-                .ToString();
+            requestReceived = request is not null;
 
-            isIgnoredTelemetrySource =
-                !string.IsNullOrWhiteSpace(
-                    options.Value.TelemetryIgnoredRemoteAddress) &&
-                string.Equals(
-                    remoteAddress,
-                    options.Value.TelemetryIgnoredRemoteAddress,
-                    StringComparison.OrdinalIgnoreCase);
+            requestLength = request?
+                .TrimEnd('\r', '\n')
+                .Length ?? 0;
 
-            try
-            {
-                await using NetworkStream stream = client.GetStream();
-                string? request = await ReadAsync(stream, options.Value.RequestTimeoutSeconds, stoppingToken);
+            logger.LogDebug(
+                "Received Finger request containing {RequestLength} characters from {Remote}.",
+                requestLength,
+                remote);
 
-                requestReceived = request is not null;
+            FingerResponse response =
+                await responseResolver.ResolveAsync(
+                    request,
+                    stoppingToken);
 
-                requestLength = request?
-                    .TrimEnd('\r', '\n')
-                    .Length ?? 0;
+            responseType = response.Type;
 
-                logger.LogDebug(
-                    "Received Finger request containing {RequestLength} characters from {Remote}.",
-                    requestLength,
-                    remote);
+            await stream.WriteAsync(response.Bytes, stoppingToken);
+            await stream.FlushAsync(stoppingToken);
 
-                await stream.WriteAsync(ResponseBytes, stoppingToken);
-                await stream.FlushAsync(stoppingToken);
-
-                outcome = "served";
-                succeeded = true;
-            }
-            catch (OperationCanceledException)
-            when (stoppingToken.IsCancellationRequested)
-            {
-                // The application is shutting down. This is not a request
-                // timeout and does not need to produce a telemetry event.
-                shouldPublish = false;
-
-                logger.LogDebug(
-                    "Connection {ConnectionId} from {Remote} was cancelled during shutdown.",
-                    connectionId,
-                    remote);
-            }
-            catch (OperationCanceledException)
-            {
-                outcome = "timeout";
-
-                logger.LogWarning(
-                    "Connection {ConnectionId} from {Remote} timed out.",
-                    connectionId,
-                    remote);
-            }
-            catch (InvalidDataException exception)
-            {
-                outcome = "malformed";
-
-                logger.LogWarning(
-                    exception,
-                    "Rejected malformed request on connection {ConnectionId} from {Remote}.",
-                    connectionId,
-                    remote);
-            }
-            catch (IOException exception)
-            {
-                outcome = "io-error";
-
-                logger.LogDebug(
-                    exception,
-                    "Connection {ConnectionId} from {Remote} ended early.",
-                    connectionId,
-                    remote);
-            }
-            catch (SocketException exception)
-            {
-                outcome = "socket-error";
-
-                logger.LogDebug(
-                    exception,
-                    "Socket error on connection {ConnectionId} from {Remote}.",
-                    connectionId,
-                    remote);
-            }
-            catch (Exception exception)
-            {
-                outcome = "failed";
-
-                logger.LogError(
-                    exception,
-                    "Unhandled error on connection {ConnectionId} from {Remote}.",
-                    connectionId,
-                    remote);
-            }
+            outcome = "served";
+            succeeded = true;
         }
+        catch (OperationCanceledException)
+        when (stoppingToken.IsCancellationRequested)
+        {
+            // The application is shutting down. This is not a request
+            // timeout and does not need to produce a telemetry event.
+            shouldPublish = false;
+
+            logger.LogDebug(
+                "Connection {ConnectionId} from {Remote} was cancelled during shutdown.",
+                connectionId,
+                remote);
+        }
+        catch (OperationCanceledException)
+        {
+            outcome = "timeout";
+
+            logger.LogWarning(
+                "Connection {ConnectionId} from {Remote} timed out.",
+                connectionId,
+                remote);
+        }
+        catch (InvalidDataException exception)
+        {
+            outcome = "malformed";
+
+            logger.LogWarning(
+                exception,
+                "Rejected malformed request on connection {ConnectionId} from {Remote}.",
+                connectionId,
+                remote);
+        }
+        catch (IOException exception)
+        {
+            outcome = "io-error";
+
+            logger.LogDebug(
+                exception,
+                "Connection {ConnectionId} from {Remote} ended early.",
+                connectionId,
+                remote);
+        }
+        catch (SocketException exception)
+        {
+            outcome = "socket-error";
+
+            logger.LogDebug(
+                exception,
+                "Socket error on connection {ConnectionId} from {Remote}.",
+                connectionId,
+                remote);
+        }
+        catch (Exception exception)
+        {
+            outcome = "failed";
+
+            logger.LogError(
+                exception,
+                "Unhandled error on connection {ConnectionId} from {Remote}.",
+                connectionId,
+                remote);
+        }
+
         stopwatch.Stop();
 
         if (!shouldPublish || isIgnoredTelemetrySource)
@@ -250,6 +266,7 @@ public class FingerWorker(
                     RequestReceived: requestReceived,
                     RequestLength: requestLength,
                     Remote: remoteString,
+                    ResponseType: responseType,
                     DurationMilliseconds: stopwatch.ElapsedMilliseconds,
                     Outcome: outcome,
                     Succeeded: succeeded),
