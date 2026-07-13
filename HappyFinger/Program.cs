@@ -5,6 +5,7 @@
  */
 
 using HappyFinger;
+using JoyfulReaperLib.MissionControl;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -20,6 +21,10 @@ builder.Services
     .Validate(options => options.MaxConcurrentConnections > 0, "Finger:MaxConcurrentConnections must be positive.")
     .Validate(options => options.RequestTimeoutSeconds > 0, "Finger:RequestTimeoutSeconds must be positive.")
     .ValidateOnStart();
+
+builder.Services.AddMissionControlClient(
+    builder.Configuration.GetSection(
+        MissionControlClientOptions.SectionName));
 
 builder.Services.AddHostedService<FingerWorker>();
 

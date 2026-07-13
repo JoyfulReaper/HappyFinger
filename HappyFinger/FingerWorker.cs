@@ -5,9 +5,11 @@
  */
 
 using JoyfulReaperLib.JRNet;
+using JoyfulReaperLib.MissionControl;
 using Microsoft.Extensions.Options;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -16,6 +18,7 @@ namespace HappyFinger;
 
 public class FingerWorker(
     ILogger<FingerWorker> logger,
+    IMissionControlClient missionControlClient,
     IOptions<HappyFingerOptions> options) : BackgroundService
 {
     private TcpListener? _listener;
@@ -111,6 +114,16 @@ public class FingerWorker(
         TcpClient client,
         CancellationToken stoppingToken)
     {
+        var occurredAt = DateTimeOffset.UtcNow;
+        var stopwatch = Stopwatch.StartNew();
+        var correlationId = Guid.NewGuid().ToString("N");
+
+        bool requestReceived = false;
+        int requestLength = 0;
+        string outcome = "failed";
+        bool succeeded = false;
+        bool shouldPublish = true;
+
         using (client)
         {
             client.NoDelay = true;
@@ -121,13 +134,39 @@ public class FingerWorker(
                 await using NetworkStream stream = client.GetStream();
                 string? request = await ReadAsync(stream, options.Value.RequestTimeoutSeconds, stoppingToken);
 
-                logger.LogDebug("Received request: {Request} from {Remote}.", request ?? "<no data>", client.Client.RemoteEndPoint);
+                requestReceived = request is not null;
+
+                requestLength = request?
+                    .TrimEnd('\r', '\n')
+                    .Length ?? 0;
+
+                logger.LogDebug(
+                    "Received Finger request containing {RequestLength} characters from {Remote}.",
+                    requestLength,
+                    remote);
 
                 await stream.WriteAsync(ResponseBytes, stoppingToken);
                 await stream.FlushAsync(stoppingToken);
+
+                outcome = "served";
+                succeeded = true;
+            }
+            catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
+            {
+                // The application is shutting down. This is not a request
+                // timeout and does not need to produce a telemetry event.
+                shouldPublish = false;
+
+                logger.LogDebug(
+                    "Connection {ConnectionId} from {Remote} was cancelled during shutdown.",
+                    connectionId,
+                    remote);
             }
             catch (OperationCanceledException)
             {
+                outcome = "timeout";
+
                 logger.LogWarning(
                     "Connection {ConnectionId} from {Remote} timed out.",
                     connectionId,
@@ -135,6 +174,8 @@ public class FingerWorker(
             }
             catch (InvalidDataException exception)
             {
+                outcome = "malformed";
+
                 logger.LogWarning(
                     exception,
                     "Rejected malformed request on connection {ConnectionId} from {Remote}.",
@@ -143,6 +184,8 @@ public class FingerWorker(
             }
             catch (IOException exception)
             {
+                outcome = "io-error";
+
                 logger.LogDebug(
                     exception,
                     "Connection {ConnectionId} from {Remote} ended early.",
@@ -151,6 +194,8 @@ public class FingerWorker(
             }
             catch (SocketException exception)
             {
+                outcome = "socket-error";
+
                 logger.LogDebug(
                     exception,
                     "Socket error on connection {ConnectionId} from {Remote}.",
@@ -159,11 +204,44 @@ public class FingerWorker(
             }
             catch (Exception exception)
             {
+                outcome = "failed";
+
                 logger.LogError(
                     exception,
                     "Unhandled error on connection {ConnectionId} from {Remote}.",
                     connectionId,
                     remote);
+            }
+            stopwatch.Stop();
+
+            if (!shouldPublish)
+            {
+                return;
+            }
+
+            try
+            {
+                await missionControlClient.TryPublishAsync(
+                    eventType: "happyfinger.request.completed",
+                    payload: new FingerRequestCompletedEvent(
+                        RequestReceived: requestReceived,
+                        RequestLength: requestLength,
+                        Remote: remote?.ToString() ?? "unknown",
+                        DurationMilliseconds: stopwatch.ElapsedMilliseconds,
+                        Outcome: outcome,
+                        Succeeded: succeeded),
+                    occurredAt: occurredAt,
+                    correlationId: correlationId,
+                    cancellationToken: stoppingToken);
+            }
+            catch (Exception exception)
+            {
+                // IMissionControlClient is supposed to be best-effort, but this
+                // protects HappyFinger from custom or test implementations that throw.
+                logger.LogWarning(
+                    exception,
+                    "Failed to publish Mission Control event for connection {ConnectionId}.",
+                    connectionId);
             }
         }
     }
@@ -188,7 +266,8 @@ public class FingerWorker(
                 int remainingBuffer = BUFFER_SIZE - count;
                 if (remainingBuffer == 0)
                 {
-                    throw new InternalBufferOverflowException();
+                    throw new InvalidDataException(
+                        $"Finger request exceeded the maximum supported length of {BUFFER_SIZE} bytes.");
                 }
 
                 int bytesRead = await stream.ReadAsync(
