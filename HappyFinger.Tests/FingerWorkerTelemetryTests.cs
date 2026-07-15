@@ -1,3 +1,4 @@
+using HappyFinger.Steam;
 using JoyfulReaperLib.MissionControl;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

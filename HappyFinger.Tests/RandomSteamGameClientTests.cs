@@ -1,3 +1,4 @@
+using HappyFinger.Steam;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Text;

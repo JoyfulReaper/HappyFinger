@@ -1,3 +1,5 @@
+using HappyFinger.Steam;
+
 namespace HappyFinger;
 
 public sealed class FingerResponseResolver(

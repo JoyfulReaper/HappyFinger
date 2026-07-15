@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace HappyFinger;
+namespace HappyFinger.Steam;
 
 internal static class RandomSteamGameResponseFormatter
 {

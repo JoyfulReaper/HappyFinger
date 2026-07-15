@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace HappyFinger;
+namespace HappyFinger.Steam;
 
 internal static class SteamIdParser
 {

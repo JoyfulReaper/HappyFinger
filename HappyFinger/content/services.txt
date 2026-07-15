@@ -16,6 +16,10 @@ Random Steam Game
   https://randomsteam.kgivler.com
   Random game picker for Steam libraries.
 
+QOTD
+  qotd.kgivler.com:17
+  Quote of the Day server.
+
 Website
   https://kgivler.com
 

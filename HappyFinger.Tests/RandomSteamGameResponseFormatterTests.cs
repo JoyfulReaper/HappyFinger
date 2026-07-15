@@ -1,3 +1,5 @@
+using HappyFinger.Steam;
+
 namespace HappyFinger.Tests;
 
 public sealed class RandomSteamGameResponseFormatterTests

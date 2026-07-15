@@ -1,4 +1,4 @@
-namespace HappyFinger;
+namespace HappyFinger.Steam;
 
 public sealed class RandomSteamGameOptions
 {
