@@ -185,7 +185,7 @@ public class FingerWorker(
             succeeded = true;
         }
         catch (OperationCanceledException)
-        when (stoppingToken.IsCancellationRequested)
+            when (stoppingToken.IsCancellationRequested)
         {
             // The application is shutting down. This is not a request
             // timeout and does not need to produce a telemetry event.
