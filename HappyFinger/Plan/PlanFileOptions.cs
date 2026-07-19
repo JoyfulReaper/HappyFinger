@@ -1,4 +1,4 @@
-namespace HappyFinger;
+namespace HappyFinger.Plan;
 
 public sealed class PlanFileOptions
 {

@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Text;
 
-namespace HappyFinger;
+namespace HappyFinger.Plan;
 
 public sealed class PlanFileReader(
     IOptions<PlanFileOptions> options,

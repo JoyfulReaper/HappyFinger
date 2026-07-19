@@ -1,3 +1,5 @@
+using HappyFinger.Finger;
+
 namespace HappyFinger.Tests;
 
 public sealed class FingerQueryParserTests

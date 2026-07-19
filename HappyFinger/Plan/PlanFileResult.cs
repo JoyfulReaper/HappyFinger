@@ -1,4 +1,4 @@
-namespace HappyFinger;
+namespace HappyFinger.Plan;
 
 public readonly record struct PlanFileResult(
     bool Available,

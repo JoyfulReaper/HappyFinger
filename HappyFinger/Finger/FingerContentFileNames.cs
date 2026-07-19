@@ -1,4 +1,4 @@
-namespace HappyFinger;
+namespace HappyFinger.Finger;
 
 public static class FingerContentFileNames
 {

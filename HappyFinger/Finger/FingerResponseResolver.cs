@@ -1,6 +1,7 @@
+using HappyFinger.Plan;
 using HappyFinger.Steam;
 
-namespace HappyFinger;
+namespace HappyFinger.Finger;
 
 public sealed class FingerResponseResolver(
     IPlanFileReader planFileReader,

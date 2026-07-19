@@ -4,6 +4,8 @@
  * Licensed under the MIT License.
  */
 
+using HappyFinger.Events;
+using HappyFinger.Finger;
 using JoyfulReaperLib.JRNet;
 using JoyfulReaperLib.MissionControl;
 using Microsoft.Extensions.Options;
@@ -45,6 +47,33 @@ public class FingerWorker(
             ipAddress,
             options.Value.Port
         );
+
+        var occurredAt = DateTimeOffset.UtcNow;
+
+        try
+        {
+            bool published = await missionControlClient.TryPublishAsync(
+                eventType: FingerServiceStartedEvent.EventName,
+                payload: new FingerServiceStartedEvent(
+                    $"{ipAddress}:{options.Value.Port}"),
+                payloadTypeInfo: FingerJsonContext.Default.FingerServiceStartedEvent,
+                occurredAt: occurredAt,
+                correlationId: null,
+                cancellationToken: stoppingToken);
+
+            if (!published)
+            {
+                logger.LogWarning(
+                    "Mission Control did not accept {EventType}",
+                    FingerServiceStartedEvent.EventName);
+            }
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Failed to publish Mission Control event for Finger Service Started");
+        }
 
         try
         {
@@ -156,9 +185,10 @@ public class FingerWorker(
                 options.Value.TelemetryIgnoredRemoteAddress,
                 StringComparison.OrdinalIgnoreCase);
 
+        string? request = null;
         try
         {
-            string? request = await ReadAsync(stream, options.Value.RequestTimeoutSeconds, stoppingToken);
+            request = await ReadAsync(stream, options.Value.RequestTimeoutSeconds, stoppingToken);
 
             requestReceived = request is not null;
 
@@ -265,11 +295,15 @@ public class FingerWorker(
                 payload: new FingerRequestCompletedEvent(
                     RequestReceived: requestReceived,
                     RequestLength: requestLength,
+                    Request: request?.Length > 100
+                        ? request.Substring(0, 100) + "..."
+                        : request ?? string.Empty,
                     Remote: remoteString,
                     ResponseType: responseType,
                     DurationMilliseconds: stopwatch.ElapsedMilliseconds,
                     Outcome: outcome,
                     Succeeded: succeeded),
+                payloadTypeInfo: FingerJsonContext.Default.FingerRequestCompletedEvent,
                 occurredAt: occurredAt,
                 correlationId: correlationId,
                 cancellationToken: stoppingToken);

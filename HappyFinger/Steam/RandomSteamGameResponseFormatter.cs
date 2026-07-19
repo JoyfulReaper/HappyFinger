@@ -1,3 +1,4 @@
+using HappyFinger.Finger;
 using System.Globalization;
 using System.Text;
 
