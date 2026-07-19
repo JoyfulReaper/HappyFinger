@@ -45,8 +45,8 @@ public sealed class RandomSteamGameClient(
             }
 
             RandomGameDetails? game =
-                await response.Content.ReadFromJsonAsync<RandomGameDetails>(
-                    JsonOptions,
+                await response.Content.ReadFromJsonAsync(
+                    HappyFingerJsonContext.Default.RandomGameDetails,
                     cancellationToken);
 
             if (game is null || game.Id <= 0 || string.IsNullOrWhiteSpace(game.Name))
