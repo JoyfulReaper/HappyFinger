@@ -13,7 +13,7 @@
 
 	  <!-- Optimizes for size, cutting out unneeded native metadata -->
 	  <OptimizationPreference>Size</OptimizationPreference>
-	  <EnableConfigurationBindingSourceGenerator>true</EnableConfigurationBindingSourceGenerator>
+	  <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
   </PropertyGroup>
 
   <ItemGroup>
