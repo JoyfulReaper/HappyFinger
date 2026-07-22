@@ -25,6 +25,9 @@ public class FingerWorker(
     IFingerResponseResolver responseResolver,
     IOptions<HappyFingerOptions> options) : BackgroundService
 {
+    private static readonly TimeSpan TelemetryPublishTimeout =
+        TimeSpan.FromSeconds(2);
+
     private TcpListener? _listener;
     private readonly ConcurrentDictionary<long, Task> _activeConnections = new();
     private volatile bool _stopRequested;
@@ -33,6 +36,8 @@ public class FingerWorker(
         options.Value.MaxConcurrentConnections
     );
     private long _nextConnectionId;
+    public int BoundPort { get; private set; }
+
     private static readonly Encoding RequestEncoding = new UTF8Encoding(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: false);
@@ -42,6 +47,7 @@ public class FingerWorker(
         IPAddress ipAddress = IPAddressUtils.ParseListenAddress(options.Value.ListenAddress);
         _listener = new TcpListener(ipAddress, options.Value.Port);
         _listener.Start();
+        BoundPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
 
         logger.LogInformation(
             "HappyFinger Server Listening on {address}:{port}",
@@ -51,30 +57,10 @@ public class FingerWorker(
 
         var occurredAt = DateTimeOffset.UtcNow;
 
-        try
-        {
-            bool published = await missionControlClient.TryPublishAsync(
-                eventType: FingerServiceStartedEvent.EventName,
-                payload: new FingerServiceStartedEvent(
-                    $"{ipAddress}:{options.Value.Port}"),
-                payloadTypeInfo: FingerJsonContext.Default.FingerServiceStartedEvent,
-                occurredAt: occurredAt,
-                correlationId: null,
-                cancellationToken: stoppingToken);
-
-            if (!published)
-            {
-                logger.LogWarning(
-                    "Mission Control did not accept {EventType}",
-                    FingerServiceStartedEvent.EventName);
-            }
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(
-                exception,
-                "Failed to publish Mission Control event for Finger Service Started");
-        }
+        await PublishServiceStartedTelemetryAsync(
+            $"{ipAddress}:{options.Value.Port}",
+            occurredAt,
+            stoppingToken);
 
         try
         {
@@ -111,7 +97,6 @@ public class FingerWorker(
                     completedTask =>
                     {
                         _activeConnections.TryRemove(connectionId, out _);
-                        _connectionLimit.Release();
                     },
                     CancellationToken.None,
                     TaskContinuationOptions.ExecuteSynchronously,
@@ -142,20 +127,37 @@ public class FingerWorker(
         TcpClient client,
         CancellationToken stoppingToken)
     {
+        FingerRequestTelemetryResult? telemetry = null;
+
         using (client)
         {
-            client.NoDelay = true;
-            await using NetworkStream stream = client.GetStream();
+            try
+            {
+                client.NoDelay = true;
+                await using NetworkStream stream = client.GetStream();
 
-            await HandleConnectionAsync(
+                telemetry = await HandleConnectionAsync(
+                    connectionId,
+                    stream,
+                    client.Client.RemoteEndPoint,
+                    stoppingToken);
+            }
+            finally
+            {
+                _connectionLimit.Release();
+            }
+        }
+
+        if (telemetry is not null)
+        {
+            await PublishRequestCompletedTelemetryAsync(
                 connectionId,
-                stream,
-                client.Client.RemoteEndPoint,
+                telemetry,
                 stoppingToken);
         }
     }
 
-    internal async Task HandleConnectionAsync(
+    internal async Task<FingerRequestTelemetryResult?> HandleConnectionAsync(
         long connectionId,
         Stream stream,
         EndPoint? remote,
@@ -286,26 +288,111 @@ public class FingerWorker(
                 connectionId,
                 remoteString);
 
-            return;
+            return null;
         }
+
+        return new FingerRequestTelemetryResult(
+            RequestReceived: requestReceived,
+            RequestLength: requestLength,
+            Request: SanitizeTelemetryRequest(request),
+            Remote: remoteString,
+            ResponseType: responseType,
+            DurationMilliseconds: stopwatch.ElapsedMilliseconds,
+            Outcome: outcome,
+            Succeeded: succeeded,
+            OccurredAt: occurredAt,
+            CorrelationId: correlationId);
+    }
+
+    private async Task PublishServiceStartedTelemetryAsync(
+        string endpoint,
+        DateTimeOffset occurredAt,
+        CancellationToken stoppingToken)
+    {
+        using var timeout =
+            CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        timeout.CancelAfter(TelemetryPublishTimeout);
 
         try
         {
-            await missionControlClient.TryPublishAsync(
+            bool published = await missionControlClient.TryPublishAsync(
+                eventType: FingerServiceStartedEvent.EventName,
+                payload: new FingerServiceStartedEvent(endpoint),
+                payloadTypeInfo: FingerJsonContext.Default.FingerServiceStartedEvent,
+                occurredAt: occurredAt,
+                correlationId: null,
+                cancellationToken: timeout.Token);
+
+            if (!published)
+            {
+                logger.LogWarning(
+                    "Mission Control did not accept {EventType}",
+                    FingerServiceStartedEvent.EventName);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            logger.LogDebug(
+                "Service-started telemetry publishing stopped during shutdown.");
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning(
+                "Timed out publishing Mission Control event for Finger Service Started.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Failed to publish Mission Control event for Finger Service Started");
+        }
+    }
+
+    private async Task PublishRequestCompletedTelemetryAsync(
+        long connectionId,
+        FingerRequestTelemetryResult telemetry,
+        CancellationToken stoppingToken)
+    {
+        using var timeout =
+            CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        timeout.CancelAfter(TelemetryPublishTimeout);
+
+        try
+        {
+            bool published = await missionControlClient.TryPublishAsync(
                 eventType: "happyfinger.request.completed",
                 payload: new FingerRequestCompletedEvent(
-                    RequestReceived: requestReceived,
-                    RequestLength: requestLength,
-                    Request: SanitizeTelemetryRequest(request),
-                    Remote: remoteString,
-                    ResponseType: responseType,
-                    DurationMilliseconds: stopwatch.ElapsedMilliseconds,
-                    Outcome: outcome,
-                    Succeeded: succeeded),
+                    telemetry.RequestReceived,
+                    telemetry.Request,
+                    telemetry.RequestLength,
+                    telemetry.Remote,
+                    telemetry.ResponseType,
+                    telemetry.DurationMilliseconds,
+                    telemetry.Outcome,
+                    telemetry.Succeeded),
                 payloadTypeInfo: FingerJsonContext.Default.FingerRequestCompletedEvent,
-                occurredAt: occurredAt,
-                correlationId: correlationId,
-                cancellationToken: stoppingToken);
+                occurredAt: telemetry.OccurredAt,
+                correlationId: telemetry.CorrelationId,
+                cancellationToken: timeout.Token);
+
+            if (!published)
+            {
+                logger.LogWarning(
+                    "Mission Control did not accept telemetry for Finger connection {ConnectionId}.",
+                    connectionId);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            logger.LogDebug(
+                "Telemetry publishing stopped for Finger connection {ConnectionId}.",
+                connectionId);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning(
+                "Timed out publishing telemetry for Finger connection {ConnectionId}.",
+                connectionId);
         }
         catch (Exception exception)
         {
@@ -422,4 +509,16 @@ public class FingerWorker(
 
         return base.StopAsync(cancellationToken);
     }
+
+    internal sealed record FingerRequestTelemetryResult(
+        bool RequestReceived,
+        int RequestLength,
+        string Request,
+        string Remote,
+        string ResponseType,
+        long DurationMilliseconds,
+        string Outcome,
+        bool Succeeded,
+        DateTimeOffset OccurredAt,
+        string CorrelationId);
 }

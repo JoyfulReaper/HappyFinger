@@ -6,6 +6,7 @@ using JoyfulReaperLib.MissionControl;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -63,15 +64,12 @@ public sealed class FingerWorkerTelemetryTests
                     Truncated: false)));
         var stream = new ScriptedStream(Encoding.UTF8.GetBytes(request));
 
-        await worker.HandleConnectionAsync(
+        var payload = AssertTelemetryPayload(await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
-            CancellationToken.None);
+            CancellationToken.None));
 
-        PublishedEvent publishedEvent = Assert.Single(missionControlClient.Events);
-        Assert.Equal("happyfinger.request.completed", publishedEvent.EventType);
-        var payload = Assert.IsType<FingerRequestCompletedEvent>(publishedEvent.Payload);
         Assert.Equal(expectedResponseType, payload.ResponseType);
         Assert.Equal("served", payload.Outcome);
         Assert.True(payload.Succeeded);
@@ -92,13 +90,12 @@ public sealed class FingerWorkerTelemetryTests
                     Truncated: false)));
         var stream = new ScriptedStream(Encoding.UTF8.GetBytes("now\r\n"));
 
-        await worker.HandleConnectionAsync(
+        var payload = AssertTelemetryPayload(await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
-            CancellationToken.None);
+            CancellationToken.None));
 
-        var payload = AssertPublishedPayload(missionControlClient);
         string payloadText = payload.ToString();
 
         Assert.Equal(FingerResponseTypes.Now, payload.ResponseType);
@@ -127,13 +124,12 @@ public sealed class FingerWorkerTelemetryTests
         var stream = new ScriptedStream(
             Encoding.UTF8.GetBytes("76561198000000000\r\n"));
 
-        await worker.HandleConnectionAsync(
+        var payload = AssertTelemetryPayload(await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
-            CancellationToken.None);
+            CancellationToken.None));
 
-        var payload = AssertPublishedPayload(missionControlClient);
         string payloadText = SerializePayload(payload);
 
         Assert.Equal(FingerResponseTypes.RandomGame, payload.ResponseType);
@@ -163,13 +159,11 @@ public sealed class FingerWorkerTelemetryTests
         var stream = new ScriptedStream(
             Encoding.UTF8.GetBytes("  ky\tle\u0001\r\n"));
 
-        await worker.HandleConnectionAsync(
+        var payload = AssertTelemetryPayload(await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
-            CancellationToken.None);
-
-        var payload = AssertPublishedPayload(missionControlClient);
+            CancellationToken.None));
 
         Assert.Equal("ky le", payload.Request);
         Assert.Equal("  ky\tle\u0001\r\n", responseResolver.Request);
@@ -189,13 +183,11 @@ public sealed class FingerWorkerTelemetryTests
         var stream = new ScriptedStream(
             Encoding.UTF8.GetBytes("76561198000000000\r\n"));
 
-        await worker.HandleConnectionAsync(
+        var payload = AssertTelemetryPayload(await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
-            CancellationToken.None);
-
-        var payload = AssertPublishedPayload(missionControlClient);
+            CancellationToken.None));
 
         Assert.Equal(FingerResponseTypes.RandomGameUnavailable, payload.ResponseType);
         Assert.Equal("served", payload.Outcome);
@@ -209,13 +201,11 @@ public sealed class FingerWorkerTelemetryTests
         FingerWorker worker = CreateWorker(missionControlClient);
         var stream = new ThrowingReadStream(new OperationCanceledException());
 
-        await worker.HandleConnectionAsync(
+        var payload = AssertTelemetryPayload(await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
-            CancellationToken.None);
-
-        var payload = AssertPublishedPayload(missionControlClient);
+            CancellationToken.None));
         Assert.Equal(FingerResponseTypes.None, payload.ResponseType);
         Assert.Equal("timeout", payload.Outcome);
         Assert.False(payload.Succeeded);
@@ -228,13 +218,11 @@ public sealed class FingerWorkerTelemetryTests
         FingerWorker worker = CreateWorker(missionControlClient);
         var stream = new ScriptedStream(Encoding.UTF8.GetBytes(new string('x', 1024)));
 
-        await worker.HandleConnectionAsync(
+        var payload = AssertTelemetryPayload(await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
-            CancellationToken.None);
-
-        var payload = AssertPublishedPayload(missionControlClient);
+            CancellationToken.None));
         Assert.Equal(FingerResponseTypes.None, payload.ResponseType);
         Assert.Equal("malformed", payload.Outcome);
         Assert.False(payload.Succeeded);
@@ -249,13 +237,11 @@ public sealed class FingerWorkerTelemetryTests
             Encoding.UTF8.GetBytes("\r\n"),
             throwOnWrite: new IOException("Simulated write failure."));
 
-        await worker.HandleConnectionAsync(
+        var payload = AssertTelemetryPayload(await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
-            CancellationToken.None);
-
-        var payload = AssertPublishedPayload(missionControlClient);
+            CancellationToken.None));
         Assert.Equal(FingerResponseTypes.Directory, payload.ResponseType);
         Assert.Equal("io-error", payload.Outcome);
         Assert.False(payload.Succeeded);
@@ -271,7 +257,7 @@ public sealed class FingerWorkerTelemetryTests
         FingerWorker worker = CreateWorker(missionControlClient);
         var stream = new ScriptedStream(Encoding.UTF8.GetBytes("kyle\r\n"));
 
-        await worker.HandleConnectionAsync(
+        _ = await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
@@ -294,13 +280,13 @@ public sealed class FingerWorkerTelemetryTests
             });
         var stream = new ScriptedStream(Encoding.UTF8.GetBytes("kyle\r\n"));
 
-        await worker.HandleConnectionAsync(
+        var telemetry = await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             new IPEndPoint(IPAddress.Parse("203.0.113.10"), 54321),
             CancellationToken.None);
 
-        Assert.Empty(missionControlClient.Events);
+        Assert.Null(telemetry);
     }
 
     [Fact]
@@ -312,21 +298,146 @@ public sealed class FingerWorkerTelemetryTests
         using var stoppingTokenSource = new CancellationTokenSource();
         await stoppingTokenSource.CancelAsync();
 
-        await worker.HandleConnectionAsync(
+        var telemetry = await worker.HandleConnectionAsync(
             connectionId: 1,
             stream,
             CreateRemote(),
             stoppingTokenSource.Token);
 
-        Assert.Empty(missionControlClient.Events);
+        Assert.Null(telemetry);
     }
 
-    private static FingerRequestCompletedEvent AssertPublishedPayload(
-        TestMissionControlClient missionControlClient)
+    [Fact]
+    public async Task ClientReceivesEofWhileRequestTelemetryIsBlocked()
     {
-        PublishedEvent publishedEvent = Assert.Single(missionControlClient.Events);
-        Assert.Equal("happyfinger.request.completed", publishedEvent.EventType);
-        return Assert.IsType<FingerRequestCompletedEvent>(publishedEvent.Payload);
+        var missionControl = new BlockingRequestMissionControlClient();
+        await using var server = await FingerServerHarness.StartAsync(missionControl);
+
+        string response = await ReadFingerResponseAsync(server.Port, "kyle\r\n");
+        await missionControl.WaitForStartedCountAsync(1, TimeSpan.FromSeconds(2));
+
+        Assert.Contains("Kyle content", response);
+        Assert.Equal(0, missionControl.FinishedCount);
+
+        missionControl.Release();
+        await missionControl.WaitForFinishedCountAsync(1, TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public async Task ConnectionSlotIsReleasedBeforeRequestTelemetryCompletes()
+    {
+        var missionControl = new BlockingRequestMissionControlClient();
+        await using var server = await FingerServerHarness.StartAsync(
+            missionControl,
+            maxConcurrentConnections: 1);
+
+        string first = await ReadFingerResponseAsync(server.Port, "kyle\r\n");
+        await missionControl.WaitForStartedCountAsync(1, TimeSpan.FromSeconds(2));
+
+        string second = await ReadFingerResponseAsync(server.Port, "joke\r\n");
+        await missionControl.WaitForStartedCountAsync(2, TimeSpan.FromSeconds(2));
+
+        Assert.Contains("Kyle content", first);
+        Assert.Contains("Joke content", second);
+        Assert.Equal(0, missionControl.FinishedCount);
+
+        missionControl.Release();
+    }
+
+    [Fact]
+    public async Task RequestTelemetryIsCancelledByIndependentTimeout()
+    {
+        var missionControl = new BlockingRequestMissionControlClient();
+        await using var server = await FingerServerHarness.StartAsync(
+            missionControl,
+            maxConcurrentConnections: 1);
+
+        string response = await ReadFingerResponseAsync(server.Port, "kyle\r\n");
+        await missionControl.WaitForFinishedCountAsync(1, TimeSpan.FromSeconds(5));
+
+        Assert.Contains("Kyle content", response);
+        Assert.Equal(1, missionControl.CanceledCount);
+    }
+
+    [Fact]
+    public async Task RequestTelemetryExceptionDoesNotPreventLaterRequests()
+    {
+        var missionControl = new ThrowingRequestMissionControlClient();
+        await using var server = await FingerServerHarness.StartAsync(missionControl);
+
+        string first = await ReadFingerResponseAsync(server.Port, "kyle\r\n");
+        string second = await ReadFingerResponseAsync(server.Port, "joke\r\n");
+
+        Assert.Contains("Kyle content", first);
+        Assert.Contains("Joke content", second);
+        Assert.Equal(2, missionControl.RequestAttempts);
+    }
+
+    [Fact]
+    public async Task StartupTelemetryTimeoutDoesNotPreventAcceptingConnections()
+    {
+        var missionControl = new BlockingServiceStartedMissionControlClient();
+        await using var server = await FingerServerHarness.StartAsync(missionControl);
+
+        string response = await ReadFingerResponseAsync(server.Port, "kyle\r\n", TimeSpan.FromSeconds(5));
+
+        Assert.Contains("Kyle content", response);
+        Assert.Equal(1, missionControl.CanceledCount);
+    }
+
+    [Fact]
+    public async Task ShutdownCompletesWithBlockedRequestTelemetry()
+    {
+        var missionControl = new BlockingRequestMissionControlClient();
+        await using var server = await FingerServerHarness.StartAsync(missionControl);
+
+        string response = await ReadFingerResponseAsync(server.Port, "kyle\r\n");
+        await missionControl.WaitForStartedCountAsync(1, TimeSpan.FromSeconds(2));
+
+        await server.StopAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Contains("Kyle content", response);
+        Assert.True(server.Stopped);
+    }
+
+    [Fact]
+    public async Task ConnectionSlotIsNotReleasedUntilProtocolProcessingCompletes()
+    {
+        var resolver = new BlockingResponseResolver();
+        await using var server = await FingerServerHarness.StartAsync(
+            new TestMissionControlClient(),
+            maxConcurrentConnections: 1,
+            responseResolver: resolver);
+
+        using var firstClient = await ConnectAndSendAsync(server.Port, "kyle\r\n");
+        await resolver.WaitForStartedCountAsync(1, TimeSpan.FromSeconds(2));
+
+        Task<string> secondResponse = ReadFingerResponseAsync(server.Port, "joke\r\n");
+        await Task.Delay(250);
+        Assert.False(secondResponse.IsCompleted);
+
+        resolver.Release();
+
+        string first = await ReadRemainingAsync(firstClient, TimeSpan.FromSeconds(2));
+        string second = await secondResponse.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal("blocked response", first);
+        Assert.Equal("blocked response", second);
+    }
+
+    private static FingerRequestCompletedEvent AssertTelemetryPayload(
+        FingerWorker.FingerRequestTelemetryResult? telemetry)
+    {
+        Assert.NotNull(telemetry);
+        return new FingerRequestCompletedEvent(
+            telemetry.RequestReceived,
+            telemetry.Request,
+            telemetry.RequestLength,
+            telemetry.Remote,
+            telemetry.ResponseType,
+            telemetry.DurationMilliseconds,
+            telemetry.Outcome,
+            telemetry.Succeeded);
     }
 
     private static string SerializePayload(FingerRequestCompletedEvent payload) =>
@@ -368,6 +479,102 @@ public sealed class FingerWorkerTelemetryTests
     private static IPEndPoint CreateRemote() =>
         new(IPAddress.Parse("203.0.113.10"), 54321);
 
+    private static async Task<string> ReadFingerResponseAsync(
+        int port,
+        string request,
+        TimeSpan? timeout = null)
+    {
+        using TcpClient client = await ConnectAndSendAsync(port, request);
+        return await ReadRemainingAsync(
+            client,
+            timeout ?? TimeSpan.FromSeconds(2));
+    }
+
+    private static async Task<TcpClient> ConnectAndSendAsync(
+        int port,
+        string request)
+    {
+        var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, port).WaitAsync(
+            TimeSpan.FromSeconds(2));
+        await client.GetStream().WriteAsync(Encoding.UTF8.GetBytes(request)).AsTask().WaitAsync(
+            TimeSpan.FromSeconds(2));
+        return client;
+    }
+
+    private static async Task<string> ReadRemainingAsync(
+        TcpClient client,
+        TimeSpan timeout)
+    {
+        await using NetworkStream stream = client.GetStream();
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return await reader.ReadToEndAsync().WaitAsync(timeout);
+    }
+
+    private sealed class FingerServerHarness : IAsyncDisposable
+    {
+        private readonly FingerWorker _worker;
+
+        private FingerServerHarness(FingerWorker worker)
+        {
+            _worker = worker;
+        }
+
+        public int Port => _worker.BoundPort;
+        public bool Stopped { get; private set; }
+
+        public static async Task<FingerServerHarness> StartAsync(
+            IMissionControlClient missionControlClient,
+            int maxConcurrentConnections = 4,
+            IFingerResponseResolver? responseResolver = null)
+        {
+            var worker = new FingerWorker(
+                NullLogger<FingerWorker>.Instance,
+                missionControlClient,
+                responseResolver ?? CreateResolver(),
+                Options.Create(new HappyFingerOptions
+                {
+                    ListenAddress = "127.0.0.1",
+                    Port = 0,
+                    MaxConcurrentConnections = maxConcurrentConnections,
+                    RequestTimeoutSeconds = 1
+                }));
+
+            var harness = new FingerServerHarness(worker);
+            await worker.StartAsync(CancellationToken.None);
+            await harness.WaitForPortAsync();
+            return harness;
+        }
+
+        private async Task WaitForPortAsync()
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            while (Port == 0)
+            {
+                timeout.Token.ThrowIfCancellationRequested();
+                await Task.Delay(10, timeout.Token);
+            }
+        }
+
+        public async Task StopAsync(TimeSpan? timeout = null)
+        {
+            if (Stopped)
+            {
+                return;
+            }
+
+            using var stopTimeout = new CancellationTokenSource(
+                timeout ?? TimeSpan.FromSeconds(5));
+            await _worker.StopAsync(stopTimeout.Token);
+            Stopped = true;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await StopAsync();
+        }
+    }
+
     private sealed class TestMissionControlClient : IMissionControlClient
     {
         public List<PublishedEvent> Events { get; } = [];
@@ -403,6 +610,138 @@ public sealed class FingerWorkerTelemetryTests
         DateTimeOffset OccurredAt,
         string? CorrelationId);
 
+    private sealed class BlockingRequestMissionControlClient : IMissionControlClient
+    {
+        private readonly TaskCompletionSource _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly SemaphoreSlim _startedSignal = new(0);
+        private readonly SemaphoreSlim _finishedSignal = new(0);
+        private int _startedCount;
+        private int _finishedCount;
+        private int _canceledCount;
+
+        public int FinishedCount => Volatile.Read(ref _finishedCount);
+        public int CanceledCount => Volatile.Read(ref _canceledCount);
+
+        public async Task<bool> TryPublishAsync<TPayload>(
+            string eventType,
+            TPayload payload,
+            JsonTypeInfo<TPayload> payloadTypeInfo,
+            DateTimeOffset occurredAt,
+            string? correlationId = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (eventType != FingerRequestCompletedEvent.EventName)
+            {
+                return true;
+            }
+
+            Interlocked.Increment(ref _startedCount);
+            _startedSignal.Release();
+
+            try
+            {
+                await _release.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Interlocked.Increment(ref _canceledCount);
+                throw;
+            }
+            finally
+            {
+                Interlocked.Increment(ref _finishedCount);
+                _finishedSignal.Release();
+            }
+
+            return true;
+        }
+
+        public void Release() =>
+            _release.TrySetResult();
+
+        public async Task WaitForStartedCountAsync(
+            int expectedCount,
+            TimeSpan timeout)
+        {
+            using var cancellation = new CancellationTokenSource(timeout);
+            while (Volatile.Read(ref _startedCount) < expectedCount)
+            {
+                await _startedSignal.WaitAsync(cancellation.Token);
+            }
+        }
+
+        public async Task WaitForFinishedCountAsync(
+            int expectedCount,
+            TimeSpan timeout)
+        {
+            using var cancellation = new CancellationTokenSource(timeout);
+            while (FinishedCount < expectedCount)
+            {
+                await _finishedSignal.WaitAsync(cancellation.Token);
+            }
+        }
+    }
+
+    private sealed class BlockingServiceStartedMissionControlClient : IMissionControlClient
+    {
+        private readonly TaskCompletionSource _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _canceledCount;
+
+        public int CanceledCount => Volatile.Read(ref _canceledCount);
+
+        public async Task<bool> TryPublishAsync<TPayload>(
+            string eventType,
+            TPayload payload,
+            JsonTypeInfo<TPayload> payloadTypeInfo,
+            DateTimeOffset occurredAt,
+            string? correlationId = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (eventType != FingerServiceStartedEvent.EventName)
+            {
+                return true;
+            }
+
+            try
+            {
+                await _release.Task.WaitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                Interlocked.Increment(ref _canceledCount);
+                throw;
+            }
+
+            return true;
+        }
+    }
+
+    private sealed class ThrowingRequestMissionControlClient : IMissionControlClient
+    {
+        private int _requestAttempts;
+
+        public int RequestAttempts => Volatile.Read(ref _requestAttempts);
+
+        public Task<bool> TryPublishAsync<TPayload>(
+            string eventType,
+            TPayload payload,
+            JsonTypeInfo<TPayload> payloadTypeInfo,
+            DateTimeOffset occurredAt,
+            string? correlationId = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (eventType == FingerRequestCompletedEvent.EventName)
+            {
+                Interlocked.Increment(ref _requestAttempts);
+                throw new InvalidOperationException("Telemetry failure");
+            }
+
+            return Task.FromResult(true);
+        }
+    }
+
     private sealed class TestPlanFileReader(
         PlanFileResult result) : IPlanFileReader
     {
@@ -433,6 +772,42 @@ public sealed class FingerWorkerTelemetryTests
                 new FingerResponse(
                     Encoding.UTF8.GetBytes("resolver response"),
                     FingerResponseTypes.Kyle));
+        }
+    }
+
+    private sealed class BlockingResponseResolver : IFingerResponseResolver
+    {
+        private readonly TaskCompletionSource _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly SemaphoreSlim _startedSignal = new(0);
+        private int _startedCount;
+
+        public async Task<FingerResponse> ResolveAsync(
+            string? request,
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _startedCount);
+            _startedSignal.Release();
+
+            await _release.Task.WaitAsync(cancellationToken);
+
+            return new FingerResponse(
+                Encoding.UTF8.GetBytes("blocked response"),
+                FingerResponseTypes.Kyle);
+        }
+
+        public void Release() =>
+            _release.TrySetResult();
+
+        public async Task WaitForStartedCountAsync(
+            int expectedCount,
+            TimeSpan timeout)
+        {
+            using var cancellation = new CancellationTokenSource(timeout);
+            while (Volatile.Read(ref _startedCount) < expectedCount)
+            {
+                await _startedSignal.WaitAsync(cancellation.Token);
+            }
         }
     }
 
