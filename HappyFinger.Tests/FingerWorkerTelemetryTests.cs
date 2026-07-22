@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
 namespace HappyFinger.Tests;
@@ -23,6 +24,28 @@ public sealed class FingerWorkerTelemetryTests
         { "joke\r\n", FingerResponseTypes.Joke },
         { "now\r\n", FingerResponseTypes.Now }
     };
+
+    public static TheoryData<string?, string> TelemetryRequestSanitizationCases => new()
+    {
+        { "kyle", "kyle" },
+        { "76561198000000000", "76561198000000000" },
+        { "ky\r\nle", "kyle" },
+        { "ky\tle", "ky le" },
+        { "  kyle  ", "kyle" },
+        { "ky\u0001le", "kyle" },
+        { "ky\u200Ele", "kyle" },
+        { "kyle \u2603", "kyle \u2603" },
+        { new string('x', 100), new string('x', 100) },
+        { new string('x', 101), new string('x', 100) + "..." },
+        { null, string.Empty }
+    };
+
+    [Theory]
+    [MemberData(nameof(TelemetryRequestSanitizationCases))]
+    public void SanitizeTelemetryRequest_ReturnsExpectedRequest(
+        string? request,
+        string expected) =>
+        Assert.Equal(expected, FingerWorker.SanitizeTelemetryRequest(request));
 
     [Theory]
     [MemberData(nameof(SuccessfulRequests))]
@@ -96,7 +119,7 @@ public sealed class FingerWorkerTelemetryTests
                     Succeeded: true,
                     Game: new RandomGameDetails
                     {
-                        Id = 220,
+                        Id = 42424242,
                         Name = "Half-Life 2",
                         PlaytimeForever = 872,
                         RTimeLastPlayed = 1762204440
@@ -111,14 +134,46 @@ public sealed class FingerWorkerTelemetryTests
             CancellationToken.None);
 
         var payload = AssertPublishedPayload(missionControlClient);
-        string payloadText = payload.ToString();
+        string payloadText = SerializePayload(payload);
 
         Assert.Equal(FingerResponseTypes.RandomGame, payload.ResponseType);
+        Assert.Equal("76561198000000000", payload.Request);
+        Assert.Equal(17, payload.RequestLength);
         Assert.Equal("served", payload.Outcome);
         Assert.True(payload.Succeeded);
-        Assert.DoesNotContain("76561198000000000", payloadText);
         Assert.DoesNotContain("Half-Life", payloadText);
-        Assert.DoesNotContain("220", payloadText);
+        Assert.DoesNotContain("42424242", payloadText);
+        Assert.DoesNotContain("\"id\"", payloadText);
+        Assert.DoesNotContain("\"name\"", payloadText);
+        Assert.DoesNotContain("\"playtimeForever\"", payloadText);
+        Assert.DoesNotContain("\"rTimeLastPlayed\"", payloadText);
+        Assert.DoesNotContain("872", payloadText);
+        Assert.DoesNotContain("1762204440", payloadText);
+        Assert.DoesNotContain("randomsteam.kgivler.com", payloadText);
+    }
+
+    [Fact]
+    public async Task HandleConnectionAsync_SanitizesTelemetryRequestWithoutChangingProtocolRequest()
+    {
+        var missionControlClient = new TestMissionControlClient();
+        var responseResolver = new RecordingResponseResolver();
+        FingerWorker worker = CreateWorker(
+            missionControlClient,
+            responseResolver: responseResolver);
+        var stream = new ScriptedStream(
+            Encoding.UTF8.GetBytes("  ky\tle\u0001\r\n"));
+
+        await worker.HandleConnectionAsync(
+            connectionId: 1,
+            stream,
+            CreateRemote(),
+            CancellationToken.None);
+
+        var payload = AssertPublishedPayload(missionControlClient);
+
+        Assert.Equal("ky le", payload.Request);
+        Assert.Equal("  ky\tle\u0001\r\n", responseResolver.Request);
+        Assert.Equal("resolver response", Encoding.UTF8.GetString(stream.WrittenBytes));
     }
 
     [Fact]
@@ -274,6 +329,11 @@ public sealed class FingerWorkerTelemetryTests
         return Assert.IsType<FingerRequestCompletedEvent>(publishedEvent.Payload);
     }
 
+    private static string SerializePayload(FingerRequestCompletedEvent payload) =>
+        JsonSerializer.Serialize(
+            payload,
+            FingerJsonContext.Default.FingerRequestCompletedEvent);
+
     private static FingerWorker CreateWorker(
         TestMissionControlClient missionControlClient,
         HappyFingerOptions? options = null,
@@ -358,6 +418,22 @@ public sealed class FingerWorkerTelemetryTests
             long steamId,
             CancellationToken cancellationToken) =>
             Task.FromResult(result);
+    }
+
+    private sealed class RecordingResponseResolver : IFingerResponseResolver
+    {
+        public string? Request { get; private set; }
+
+        public Task<FingerResponse> ResolveAsync(
+            string? request,
+            CancellationToken cancellationToken)
+        {
+            Request = request;
+            return Task.FromResult(
+                new FingerResponse(
+                    Encoding.UTF8.GetBytes("resolver response"),
+                    FingerResponseTypes.Kyle));
+        }
     }
 
     private sealed class TestContentProvider : IFingerContentProvider
