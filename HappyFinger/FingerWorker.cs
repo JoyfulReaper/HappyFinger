@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -295,9 +296,7 @@ public class FingerWorker(
                 payload: new FingerRequestCompletedEvent(
                     RequestReceived: requestReceived,
                     RequestLength: requestLength,
-                    Request: request?.Length > 100
-                        ? request.Substring(0, 100) + "..."
-                        : request ?? string.Empty,
+                    Request: SanitizeTelemetryRequest(request),
                     Remote: remoteString,
                     ResponseType: responseType,
                     DurationMilliseconds: stopwatch.ElapsedMilliseconds,
@@ -369,6 +368,51 @@ public class FingerWorker(
 
     private static string DecodeRequest(byte[] buffer, int length) =>
         RequestEncoding.GetString(buffer, 0, length);
+
+    internal static string SanitizeTelemetryRequest(string? request)
+    {
+        const int MAX_TELEMETRY_REQUEST_LENGTH = 100;
+
+        if (string.IsNullOrEmpty(request))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var sanitized = new StringBuilder(request.Length);
+            foreach (char character in request)
+            {
+                if (character is '\r' or '\n')
+                {
+                    continue;
+                }
+
+                if (character == '\t')
+                {
+                    sanitized.Append(' ');
+                    continue;
+                }
+
+                UnicodeCategory category = char.GetUnicodeCategory(character);
+                if (category is UnicodeCategory.Control or UnicodeCategory.Format)
+                {
+                    continue;
+                }
+
+                sanitized.Append(character);
+            }
+
+            string value = sanitized.ToString().Trim();
+            return value.Length > MAX_TELEMETRY_REQUEST_LENGTH
+                ? value[..MAX_TELEMETRY_REQUEST_LENGTH] + "..."
+                : value;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {

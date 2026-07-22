@@ -232,6 +232,7 @@ Payload fields:
 | Field                  | Description                                                   |
 | ---------------------- | ------------------------------------------------------------- |
 | `requestReceived`      | Whether a Finger request was read before processing ended.    |
+| `request`              | Sanitized submitted Finger query for private diagnostics.     |
 | `requestLength`        | Length of the request line after trimming trailing newlines.  |
 | `remote`               | Remote endpoint string for operational diagnostics.           |
 | `responseType`         | Predefined response selected by HappyFinger.                  |
@@ -263,16 +264,28 @@ random-game-unavailable
 17-digit Steam ID query returned a game. `random-game-unavailable` means the
 Steam ID was valid, but Random Steam Game could not return a usable game.
 
-HappyFinger telemetry does not include Steam IDs, selected game names, Steam app
-IDs, API URLs, response bodies, profile details, file paths, override usage, or
-file contents. Random Steam Game publishes its own detailed game-pick telemetry
-independently.
+The `request` field includes the submitted Finger query after telemetry
+sanitization. It removes carriage returns and line feeds, converts tabs to
+spaces, removes unsafe control and Unicode formatting characters, trims leading
+and trailing whitespace, and truncates values longer than 100 characters with
+`...`. Queries may contain usernames, selectors, Steam IDs, forwarding requests,
+malformed probes, or other client-supplied text.
+
+The submitted query is intended for private operational diagnostics and usage
+analysis. Operators should not expose raw telemetry publicly without appropriate
+output escaping and consideration of privacy.
+
+HappyFinger telemetry does not include selected game names, Steam app IDs, API
+URLs, response bodies, `.plan` contents, static record contents, override file
+paths, configured filesystem paths, or override usage. Random Steam Game
+publishes its own detailed game-pick telemetry independently.
 
 Example payload:
 
 ```json
 {
   "requestReceived": true,
+  "request": "kyle",
   "requestLength": 4,
   "remote": "203.0.113.10:54321",
   "responseType": "kyle",
