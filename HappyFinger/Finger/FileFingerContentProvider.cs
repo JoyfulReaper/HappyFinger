@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Text;
 
-namespace HappyFinger;
+namespace HappyFinger.Finger;
 
 public sealed class FileFingerContentProvider : IFingerContentProvider
 {

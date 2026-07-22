@@ -1,8 +1,13 @@
+using HappyFinger.Events;
+using HappyFinger.Finger;
+using HappyFinger.Plan;
+using HappyFinger.Steam;
 using JoyfulReaperLib.MissionControl;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
+using System.Text.Json.Serialization.Metadata;
 
 namespace HappyFinger.Tests;
 
@@ -311,6 +316,7 @@ public sealed class FingerWorkerTelemetryTests
         public Task<bool> TryPublishAsync<TPayload>(
             string eventType,
             TPayload payload,
+            JsonTypeInfo<TPayload> payloadTypeInfo,
             DateTimeOffset occurredAt,
             string? correlationId = null,
             CancellationToken cancellationToken = default)

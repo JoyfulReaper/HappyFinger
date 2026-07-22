@@ -5,6 +5,9 @@
  */
 
 using HappyFinger;
+using HappyFinger.Finger;
+using HappyFinger.Plan;
+using HappyFinger.Steam;
 using JoyfulReaperLib.MissionControl;
 using Microsoft.Extensions.Options;
 

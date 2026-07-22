@@ -1,3 +1,6 @@
+using HappyFinger.Finger;
+using HappyFinger.Plan;
+using HappyFinger.Steam;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Text;

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace HappyFinger;
+namespace HappyFinger.Finger;
 
 public static class FingerResponseFactory
 {
