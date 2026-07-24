@@ -19,7 +19,8 @@ Current behavior:
 * Runs as a .NET Worker service
 * Listens on a configurable address and port
 * Defaults to TCP port `79`, the classic Finger port
-* Limits concurrent connections
+* Uses the shared `JoyfulReaperLib.TcpServer` Generic Host integration
+* Limits concurrent connections and waits for a slot instead of rejecting queued clients
 * Enforces a request timeout
 * Reads a single request line ending in `\n` or `\r\n`
 * Responds with file-backed directory and profile-style text records
@@ -102,7 +103,8 @@ The default configuration resembles:
     "ListenAddress": "127.0.0.1",
     "Port": 79,
     "MaxConcurrentConnections": 64,
-    "RequestTimeoutSeconds": 15
+    "RequestTimeoutSeconds": 15,
+    "TelemetryIgnoredRemoteAddress": null
   },
   "PlanFile": {
     "Path": "data/.plan",
@@ -127,6 +129,7 @@ The default configuration resembles:
 | `Port`                            |        `79` | TCP port used by the server.                      |
 | `MaxConcurrentConnections`        |        `64` | Maximum number of active client connections.      |
 | `RequestTimeoutSeconds`           |        `15` | Time allowed for a client to send a request line. |
+| `TelemetryIgnoredRemoteAddress`   |      `null` | Optional remote IP address excluded from request telemetry, such as a health monitor. |
 | `PlanFile:Path`                   | `data/.plan` | Trusted path for the `now` record `.plan` file.  |
 | `PlanFile:MaxBytes`               |     `16384` | Maximum `.plan` bytes read per request.           |
 | `FingerContent:OverrideDirectory` |      `null` | Optional absolute directory for editable record overrides. |
@@ -223,9 +226,22 @@ Mission Control telemetry.
 
 ## Mission Control Telemetry
 
+HappyFinger attempts one `happyfinger.service.started` event after the shared
+TCP host starts. Its payload contains the configured listen address and port.
+Startup telemetry has an independent two-second timeout, so an unavailable
+Mission Control service does not prevent the TCP server from accepting
+connections.
+
 HappyFinger publishes one `happyfinger.request.completed` event for each handled
-request, except application shutdown cases and the configured Uptime Kuma
-monitoring address.
+request, except application shutdown cases and requests from
+`TelemetryIgnoredRemoteAddress`. The protocol response is written and the
+socket is closed before request telemetry runs. This releases the connection
+slot promptly, so a slow telemetry destination does not hold up a queued
+client.
+
+Request telemetry also has an independent two-second timeout. Publish failures
+are logged without preventing later requests, and shutdown does not wait
+indefinitely for blocked telemetry.
 
 Payload fields:
 
@@ -665,12 +681,16 @@ Common problems:
 HappyFinger.slnx
 ├── HappyFinger/
 │   ├── content/
+│   ├── Events/
 │   ├── Finger/
+│   │   └── FingerConnectionHandler.cs
 │   ├── Program.cs
 │   ├── FingerLifecycleService.cs
 │   ├── HappyFingerOptions.cs
 │   ├── HappyFinger.csproj
 │   └── appsettings.json
+├── HappyFinger.Tests/
+│   └── FingerConnectionHandlerTests.cs
 └── LICENSE
 ```
 
@@ -683,7 +703,6 @@ HappyFinger.slnx
 * Show uptime or current project focus.
 * Add a tiny admin reload signal.
 * Add Linux systemd packaging notes or scripts.
-* Add tests for request reading and timeout behavior.
 
 ## License
 
