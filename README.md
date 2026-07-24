@@ -665,8 +665,9 @@ Common problems:
 HappyFinger.slnx
 ├── HappyFinger/
 │   ├── content/
+│   ├── Finger/
 │   ├── Program.cs
-│   ├── FingerWorker.cs
+│   ├── FingerLifecycleService.cs
 │   ├── HappyFingerOptions.cs
 │   ├── HappyFinger.csproj
 │   └── appsettings.json
