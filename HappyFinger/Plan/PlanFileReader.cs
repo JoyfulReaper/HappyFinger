@@ -1,3 +1,10 @@
+/*
+ * Happy Finger Service
+ * Copyright (c) 2026 Kyle Givler
+ * Licensed under the MIT License.
+ */
+
+
 using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Text;

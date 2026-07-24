@@ -198,6 +198,8 @@ PublishScripts/
 
 # NuGet Packages
 *.nupkg
+!local-nuget/JoyfulReaperLib.MissionControl.0.0.3.nupkg
+!local-nuget/JoyfulReaperLib.TcpServer.0.0.4.nupkg
 # NuGet Symbol Packages
 *.snupkg
 # The packages folder can be ignored because of Package Restore

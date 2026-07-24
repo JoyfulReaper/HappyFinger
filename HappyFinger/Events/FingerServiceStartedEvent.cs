@@ -6,8 +6,7 @@
 
 namespace HappyFinger.Events;
 
-public sealed record FingerServiceStartedEvent(
-    string ListenAddress)
+public sealed record FingerServiceStartedEvent(string ListenAddress)
 {
     public const string EventName = "happyfinger.service.started";
 }

@@ -1,5 +1,5 @@
 /*
- * Happy Finger Server
+ * Happy Finger Service
  * Copyright (c) 2026 Kyle Givler
  * Licensed under the MIT License.
  */
@@ -9,13 +9,14 @@ using HappyFinger.Finger;
 using HappyFinger.Plan;
 using HappyFinger.Steam;
 using JoyfulReaperLib.MissionControl;
+using JoyfulReaperLib.TcpServer;
 using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddWindowsService(options =>
 {
-    options.ServiceName = "Happy Finger Server";
+    options.ServiceName = "Happy Finger Service";
 });
 
 builder.Services
@@ -70,20 +71,22 @@ builder.Services.AddSingleton<IPlanFileReader, PlanFileReader>();
 builder.Services.AddSingleton<IFingerContentProvider, FileFingerContentProvider>();
 builder.Services.AddSingleton<IFingerResponseResolver, FingerResponseResolver>();
 builder.Services.AddSingleton<IRandomSteamGameClient, RandomSteamGameClient>();
+
 builder.Services.AddHttpClient(
     RandomSteamGameClient.HttpClientName,
     (serviceProvider, client) =>
     {
         RandomSteamGameOptions options =
             serviceProvider
-                .GetRequiredService<IOptions<RandomSteamGameOptions>>()
-                .Value;
+                .GetRequiredService<IOptions<RandomSteamGameOptions>>().Value;
 
         client.BaseAddress = new Uri(options.BaseUrl);
         client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("HappyFinger/1.0");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("HappyFinger/0.2");
     });
-builder.Services.AddHostedService<FingerWorker>();
+
+builder.Services.AddTcpServer<FingerConnectionHandler, HappyFingerOptions>();
+builder.Services.AddHostedService<FingerLifecycleService>();
 
 var host = builder.Build();
 host.Run();

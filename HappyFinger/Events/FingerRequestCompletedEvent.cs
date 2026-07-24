@@ -1,4 +1,11 @@
-﻿namespace HappyFinger.Events;
+﻿/*
+ * Happy Finger Service
+ * Copyright (c) 2026 Kyle Givler
+ * Licensed under the MIT License.
+ */
+
+
+namespace HappyFinger.Events;
 
 public sealed record FingerRequestCompletedEvent(
     bool RequestReceived,

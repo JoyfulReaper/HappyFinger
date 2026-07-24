@@ -1,3 +1,10 @@
+/*
+ * Happy Finger Service
+ * Copyright (c) 2026 Kyle Givler
+ * Licensed under the MIT License.
+ */
+
+
 using HappyFinger.Plan;
 using HappyFinger.Steam;
 

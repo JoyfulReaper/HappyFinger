@@ -1,3 +1,10 @@
+/*
+ * Happy Finger Service
+ * Copyright (c) 2026 Kyle Givler
+ * Licensed under the MIT License.
+ */
+
+
 using HappyFinger.Finger;
 using System.Globalization;
 using System.Text;
@@ -78,7 +85,6 @@ internal static class RandomSteamGameResponseFormatter
         for (int index = 0; index < name.Length; index++)
         {
             char character = name[index];
-
             if (character == '\u001b')
             {
                 index = SkipAnsiEscapeSequence(name, index);
