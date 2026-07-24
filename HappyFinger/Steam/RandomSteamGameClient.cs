@@ -1,3 +1,10 @@
+/*
+ * Happy Finger Service
+ * Copyright (c) 2026 Kyle Givler
+ * Licensed under the MIT License.
+ */
+
+
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -17,15 +24,12 @@ public sealed class RandomSteamGameClient(
         long steamId,
         CancellationToken cancellationToken)
     {
-        using HttpClient client =
-            httpClientFactory.CreateClient(HttpClientName);
-
+        using HttpClient client = httpClientFactory.CreateClient(HttpClientName);
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"api/steam/random-game/details?userId={steamId}");
 
-        request.Headers.Accept.Add(
-            new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         try
         {
@@ -44,16 +48,13 @@ public sealed class RandomSteamGameClient(
                 return Unavailable();
             }
 
-            RandomGameDetails? game =
-                await response.Content.ReadFromJsonAsync(
-                    HappyFingerJsonContext.Default.RandomGameDetails,
-                    cancellationToken);
+            RandomGameDetails? game = await response.Content.ReadFromJsonAsync(
+                HappyFingerJsonContext.Default.RandomGameDetails,
+                cancellationToken);
 
             if (game is null || game.Id <= 0 || string.IsNullOrWhiteSpace(game.Name))
             {
-                logger.LogWarning(
-                    "Random Steam Game returned an unusable game payload.");
-
+                logger.LogWarning("Random Steam Game returned an unusable game payload.");
                 return Unavailable();
             }
 
@@ -96,7 +97,5 @@ public sealed class RandomSteamGameClient(
     }
 
     private static RandomSteamGameResult Unavailable() =>
-        new(
-            Succeeded: false,
-            Game: null);
+        new(Succeeded: false, Game: null);
 }

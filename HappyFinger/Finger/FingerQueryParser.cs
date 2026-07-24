@@ -1,3 +1,10 @@
+/*
+ * Happy Finger Service
+ * Copyright (c) 2026 Kyle Givler
+ * Licensed under the MIT License.
+ */
+
+
 namespace HappyFinger.Finger;
 
 public static class FingerQueryParser
@@ -13,19 +20,14 @@ public static class FingerQueryParser
 
         string query = request.Trim();
 
-        if (query.Equals(
-            "/W",
-            StringComparison.OrdinalIgnoreCase))
+        if (query.Equals("/W", StringComparison.OrdinalIgnoreCase))
         {
             return new FingerQuery(
                 Value: string.Empty,
                 Verbose: true);
         }
 
-        if (query.Length > 2 &&
-            query.StartsWith(
-                "/W",
-                StringComparison.OrdinalIgnoreCase) &&
+        if (query.Length > 2 && query.StartsWith("/W", StringComparison.OrdinalIgnoreCase) &&
             char.IsWhiteSpace(query[2]))
         {
             return new FingerQuery(

@@ -24,8 +24,7 @@ public sealed class FingerConnectionHandler(
     IFingerResponseResolver responseResolver,
     IOptions<HappyFingerOptions> options) : ITcpConnectionHandler
 {
-    private static readonly TimeSpan TelemetryPublishTimeout =
-        TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan TelemetryPublishTimeout = TimeSpan.FromSeconds(2); // TODO make configurable
 
     private static readonly Encoding RequestEncoding = new UTF8Encoding(
         encoderShouldEmitUTF8Identifier: false,
@@ -221,9 +220,7 @@ public sealed class FingerConnectionHandler(
         CancellationToken cancellationToken)
     {
         using var timeout =
-            CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken);
-
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TelemetryPublishTimeout);
 
         try
@@ -280,13 +277,10 @@ public sealed class FingerConnectionHandler(
         CancellationToken cancellationToken)
     {
         const int BUFFER_SIZE = 1024;
-
         byte[] buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
 
         using var timeout =
-            CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken);
-
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(
             TimeSpan.FromSeconds(requestTimeoutSeconds));
 
@@ -329,9 +323,7 @@ public sealed class FingerConnectionHandler(
         }
     }
 
-    private static string DecodeRequest(
-        byte[] buffer,
-        int length) =>
+    private static string DecodeRequest(byte[] buffer, int length) =>
         RequestEncoding.GetString(buffer, 0, length);
 
     internal static string SanitizeTelemetryRequest(
@@ -361,8 +353,7 @@ public sealed class FingerConnectionHandler(
                     continue;
                 }
 
-                UnicodeCategory category =
-                    char.GetUnicodeCategory(character);
+                UnicodeCategory category = char.GetUnicodeCategory(character);
 
                 if (category is
                     UnicodeCategory.Control or

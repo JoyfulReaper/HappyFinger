@@ -26,8 +26,7 @@ public sealed class FingerLifecycleService(
 
     public async Task StartedAsync(CancellationToken cancellationToken)
     {
-        var listenAddress =
-            IPAddressUtils.ParseListenAddress(options.Value.ListenAddress);
+        var listenAddress = IPAddressUtils.ParseListenAddress(options.Value.ListenAddress);
 
         logger.LogInformation(
             "HappyFinger server started on {Address}:{Port}",

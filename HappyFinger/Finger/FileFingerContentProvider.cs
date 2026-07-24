@@ -1,3 +1,10 @@
+/*
+ * Happy Finger Service
+ * Copyright (c) 2026 Kyle Givler
+ * Licensed under the MIT License.
+ */
+
+
 using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Text;
@@ -16,13 +23,8 @@ public sealed class FileFingerContentProvider : IFingerContentProvider
 
     public FileFingerContentProvider(
         IOptions<FingerContentOptions> options,
-        ILogger<FileFingerContentProvider> logger)
-        : this(
-            options,
-            logger,
-            Path.Combine(AppContext.BaseDirectory, "content"))
-    {
-    }
+        ILogger<FileFingerContentProvider> logger) : this(options, logger, Path.Combine(AppContext.BaseDirectory, "content"))
+    { }
 
     internal FileFingerContentProvider(
         IOptions<FingerContentOptions> options,
@@ -97,10 +99,7 @@ public sealed class FileFingerContentProvider : IFingerContentProvider
 
             while (bytesRead < buffer.Length)
             {
-                int read = await stream.ReadAsync(
-                    buffer.AsMemory(bytesRead, buffer.Length - bytesRead),
-                    cancellationToken);
-
+                int read = await stream.ReadAsync(buffer.AsMemory(bytesRead, buffer.Length - bytesRead), cancellationToken);
                 if (read == 0)
                 {
                     break;
@@ -170,18 +169,13 @@ public sealed class FileFingerContentProvider : IFingerContentProvider
             Truncated: truncated);
     }
 
-    private void LogMissing(
-        FingerContentKey key,
-        bool usedOverride) =>
+    private void LogMissing(FingerContentKey key, bool usedOverride) =>
         _logger.LogDebug(
             "{ContentSource} HappyFinger content file for {ContentKey} is not available.",
             SourceName(usedOverride),
             key);
 
-    private void LogUnreadable(
-        Exception exception,
-        FingerContentKey key,
-        bool usedOverride) =>
+    private void LogUnreadable(Exception exception, FingerContentKey key, bool usedOverride) =>
         _logger.LogWarning(
             exception,
             "Unable to read {ContentSource} HappyFinger content file for {ContentKey}.",
@@ -189,8 +183,7 @@ public sealed class FileFingerContentProvider : IFingerContentProvider
             key);
 
     private static FingerContentResult Unavailable() =>
-        new(
-            Available: false,
+        new(Available: false,
             Content: string.Empty,
             UsedOverride: false,
             Truncated: false);
