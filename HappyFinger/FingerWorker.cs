@@ -11,11 +11,8 @@ using JoyfulReaperLib.MissionControl;
 using Microsoft.Extensions.Options;
 using System.Buffers;
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 
 namespace HappyFinger;
 
@@ -37,10 +34,6 @@ public class FingerWorker(
     );
     private long _nextConnectionId;
     public int BoundPort { get; private set; }
-
-    private static readonly Encoding RequestEncoding = new UTF8Encoding(
-        encoderShouldEmitUTF8Identifier: false,
-        throwOnInvalidBytes: false);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -163,145 +156,29 @@ public class FingerWorker(
         EndPoint? remote,
         CancellationToken stoppingToken)
     {
-        var occurredAt = DateTimeOffset.UtcNow;
-        var stopwatch = Stopwatch.StartNew();
-        var correlationId = Guid.NewGuid().ToString("N");
-
-        bool requestReceived = false;
-        int requestLength = 0;
-        string responseType = FingerResponseTypes.None;
-        string outcome = "failed";
-        bool succeeded = false;
-        bool shouldPublish = true;
-
-        string remoteString = remote?.ToString() ?? "unknown";
-        var remoteAddress = (remote as IPEndPoint)?
-            .Address
-            .MapToIPv4()
-            .ToString();
-
-        bool isIgnoredTelemetrySource =
-            !string.IsNullOrWhiteSpace(
-                options.Value.TelemetryIgnoredRemoteAddress) &&
-            string.Equals(
-                remoteAddress,
-                options.Value.TelemetryIgnoredRemoteAddress,
-                StringComparison.OrdinalIgnoreCase);
-
-        string? request = null;
-        try
-        {
-            request = await ReadAsync(stream, options.Value.RequestTimeoutSeconds, stoppingToken);
-
-            requestReceived = request is not null;
-
-            requestLength = request?
-                .TrimEnd('\r', '\n')
-                .Length ?? 0;
-
-            logger.LogDebug(
-                "Received Finger request containing {RequestLength} characters from {Remote}.",
-                requestLength,
-                remote);
-
-            FingerResponse response =
-                await responseResolver.ResolveAsync(
-                    request,
-                    stoppingToken);
-
-            responseType = response.Type;
-
-            await stream.WriteAsync(response.Bytes, stoppingToken);
-            await stream.FlushAsync(stoppingToken);
-
-            outcome = "served";
-            succeeded = true;
-        }
-        catch (OperationCanceledException)
-            when (stoppingToken.IsCancellationRequested)
-        {
-            // The application is shutting down. This is not a request
-            // timeout and does not need to produce a telemetry event.
-            shouldPublish = false;
-
-            logger.LogDebug(
-                "Connection {ConnectionId} from {Remote} was cancelled during shutdown.",
+        FingerSessionResult? result =
+            await FingerConnectionHandler.ProcessAsync(
                 connectionId,
-                remote);
-        }
-        catch (OperationCanceledException)
-        {
-            outcome = "timeout";
+                stream,
+                remote,
+                responseResolver,
+                options.Value,
+                logger,
+                stoppingToken);
 
-            logger.LogWarning(
-                "Connection {ConnectionId} from {Remote} timed out.",
-                connectionId,
-                remote);
-        }
-        catch (InvalidDataException exception)
-        {
-            outcome = "malformed";
-
-            logger.LogWarning(
-                exception,
-                "Rejected malformed request on connection {ConnectionId} from {Remote}.",
-                connectionId,
-                remote);
-        }
-        catch (IOException exception)
-        {
-            outcome = "io-error";
-
-            logger.LogDebug(
-                exception,
-                "Connection {ConnectionId} from {Remote} ended early.",
-                connectionId,
-                remote);
-        }
-        catch (SocketException exception)
-        {
-            outcome = "socket-error";
-
-            logger.LogDebug(
-                exception,
-                "Socket error on connection {ConnectionId} from {Remote}.",
-                connectionId,
-                remote);
-        }
-        catch (Exception exception)
-        {
-            outcome = "failed";
-
-            logger.LogError(
-                exception,
-                "Unhandled error on connection {ConnectionId} from {Remote}.",
-                connectionId,
-                remote);
-        }
-
-        stopwatch.Stop();
-
-        if (!shouldPublish || isIgnoredTelemetrySource)
-        {
-            logger.LogDebug(
-                "Skipping telemetry for health-check connection {ConnectionId} from {Remote}.",
-                connectionId,
-                remoteString);
-
-            return null;
-        }
-
-        return new FingerRequestTelemetryResult(
-            RequestReceived: requestReceived,
-            RequestLength: requestLength,
-            Request: SanitizeTelemetryRequest(request),
-            Remote: remoteString,
-            ResponseType: responseType,
-            DurationMilliseconds: stopwatch.ElapsedMilliseconds,
-            Outcome: outcome,
-            Succeeded: succeeded,
-            OccurredAt: occurredAt,
-            CorrelationId: correlationId);
+        return result is null
+            ? null
+            : new FingerRequestTelemetryResult(
+                RequestReceived: result.RequestReceived,
+                RequestLength: result.RequestLength,
+                Request: result.Request,
+                Remote: result.Remote,
+                ResponseType: result.ResponseType,
+                DurationMilliseconds: result.DurationMilliseconds,
+                Outcome: result.Outcome,
+                Succeeded: result.Succeeded,
+                OccurredAt: result.OccurredAt,
+                CorrelationId: result.CorrelationId);
     }
 
     private async Task PublishServiceStartedTelemetryAsync(
@@ -405,101 +282,9 @@ public class FingerWorker(
         }
     }
 
-    private static async Task<string?> ReadAsync(
-        Stream stream,
-        int requestTimeoutSeconds,
-        CancellationToken stoppingToken)
-    {
-        const int BUFFER_SIZE = 1024;
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(BUFFER_SIZE);
-
-        using var timeout =
-            CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(requestTimeoutSeconds));
-
-        try
-        {
-            int count = 0;
-            while (true)
-            {
-                int remainingBuffer = BUFFER_SIZE - count;
-                if (remainingBuffer == 0)
-                {
-                    throw new InvalidDataException(
-                        $"Finger request exceeded the maximum supported length of {BUFFER_SIZE} bytes.");
-                }
-
-                int bytesRead = await stream.ReadAsync(
-                    buffer.AsMemory(count, remainingBuffer),
-                    timeout.Token);
-
-                if (bytesRead == 0)
-                {
-                    return count == 0 ? null : DecodeRequest(buffer, count);
-                }
-
-                count += bytesRead;
-
-                // Look for the newline standard (\n or \r\n) to know the client is done typing
-                if (buffer.AsSpan(0, count).IndexOf((byte)'\n') >= 0)
-                {
-                    return DecodeRequest(buffer, count);
-                }
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
-
-    private static string DecodeRequest(byte[] buffer, int length) =>
-        RequestEncoding.GetString(buffer, 0, length);
-
-    internal static string SanitizeTelemetryRequest(string? request)
-    {
-        const int MAX_TELEMETRY_REQUEST_LENGTH = 100;
-
-        if (string.IsNullOrEmpty(request))
-        {
-            return string.Empty;
-        }
-
-        try
-        {
-            var sanitized = new StringBuilder(request.Length);
-            foreach (char character in request)
-            {
-                if (character is '\r' or '\n')
-                {
-                    continue;
-                }
-
-                if (character == '\t')
-                {
-                    sanitized.Append(' ');
-                    continue;
-                }
-
-                UnicodeCategory category = char.GetUnicodeCategory(character);
-                if (category is UnicodeCategory.Control or UnicodeCategory.Format)
-                {
-                    continue;
-                }
-
-                sanitized.Append(character);
-            }
-
-            string value = sanitized.ToString().Trim();
-            return value.Length > MAX_TELEMETRY_REQUEST_LENGTH
-                ? value[..MAX_TELEMETRY_REQUEST_LENGTH] + "..."
-                : value;
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
+    internal static string SanitizeTelemetryRequest(
+        string? request) =>
+            FingerConnectionHandler.SanitizeTelemetryRequest(request);
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
