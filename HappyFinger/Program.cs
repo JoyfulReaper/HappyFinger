@@ -1,5 +1,5 @@
 /*
- * Happy Finger Server
+ * Happy Finger Service
  * Copyright (c) 2026 Kyle Givler
  * Licensed under the MIT License.
  */
@@ -15,7 +15,7 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddWindowsService(options =>
 {
-    options.ServiceName = "Happy Finger Server";
+    options.ServiceName = "Happy Finger Service";
 });
 
 builder.Services
@@ -76,8 +76,7 @@ builder.Services.AddHttpClient(
     {
         RandomSteamGameOptions options =
             serviceProvider
-                .GetRequiredService<IOptions<RandomSteamGameOptions>>()
-                .Value;
+                .GetRequiredService<IOptions<RandomSteamGameOptions>>().Value;
 
         client.BaseAddress = new Uri(options.BaseUrl);
         client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
