@@ -27,4 +27,6 @@ COPY --from=build /app/publish .
 
 EXPOSE 79
 
+USER $APP_UID
+
 ENTRYPOINT ["./HappyFinger"]
