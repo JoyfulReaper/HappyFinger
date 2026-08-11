@@ -24,6 +24,7 @@ public static class FingerContentFileNames
             FingerContentKey.ForwardingNotSupported => "forwarding-not-supported.txt",
             FingerContentKey.NowFallback => "now-fallback.txt",
             FingerContentKey.RandomGameUnavailable => "random-game-unavailable.txt",
+            FingerContentKey.InfraGrabProbe => "infragrab-finger-probe.txt",
             _ => throw new ArgumentOutOfRangeException(nameof(key), key, "Unknown Finger content key.")
         };
 }

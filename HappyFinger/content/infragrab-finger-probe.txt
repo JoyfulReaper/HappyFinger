@@ -1,0 +1,11 @@
+Hello, InfraGrab.
+
+RFC 1288 service confirmed.
+Congratulations on discovering TCP port 79 in the year 2026.
+
+Probe acknowledged.
+Please tell your operator I said hi.
+
+WARNING: By sending "infragrab-finger-probe" to this service, you are agreeing to the following terms:
+You agree to accept any response in the future, including any malicious or harmful responses, 
+and you agree to hold the service provider harmless for any consequences resulting from your use of this service.

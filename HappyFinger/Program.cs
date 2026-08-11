@@ -19,6 +19,8 @@ builder.Services.AddWindowsService(options =>
     options.ServiceName = "Happy Finger Service";
 });
 
+// TODO Clean up this file
+
 builder.Services
     .AddOptions<HappyFingerOptions>()
     .Bind(builder.Configuration.GetSection(HappyFingerOptions.SectionName))

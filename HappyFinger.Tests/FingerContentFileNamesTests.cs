@@ -17,7 +17,8 @@ public sealed class FingerContentFileNamesTests
         { FingerContentKey.NotFound, "not-found.txt" },
         { FingerContentKey.ForwardingNotSupported, "forwarding-not-supported.txt" },
         { FingerContentKey.NowFallback, "now-fallback.txt" },
-        { FingerContentKey.RandomGameUnavailable, "random-game-unavailable.txt" }
+        { FingerContentKey.RandomGameUnavailable, "random-game-unavailable.txt" },
+        { FingerContentKey.InfraGrabProbe, "infragrab-finger-probe.txt" },
     };
 
     [Theory]

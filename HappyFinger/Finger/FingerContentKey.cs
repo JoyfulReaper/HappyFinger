@@ -17,6 +17,7 @@ public enum FingerContentKey
     ReaperShell,
     Help,
     Joke,
+    InfraGrabProbe,
     NotFound,
     ForwardingNotSupported,
     NowFallback,

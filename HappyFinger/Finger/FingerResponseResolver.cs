@@ -142,6 +142,10 @@ public sealed class FingerResponseResolver(
                 FingerContentKey.Joke,
                 FingerResponseTypes.Joke,
                 cancellationToken),
+            "infragrab-finger-probe" => CreateContentResponseAsync(
+                FingerContentKey.InfraGrabProbe,
+                FingerResponseTypes.InfraGrabProbe,
+                cancellationToken),
             _ => CreateContentResponseAsync(
                 FingerContentKey.NotFound,
                 FingerResponseTypes.NotFound,

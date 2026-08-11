@@ -23,4 +23,5 @@ public static class FingerResponseTypes
     public const string ForwardingNotSupported = "forwarding-not-supported";
     public const string NotFound = "not-found";
     public const string Joke = "joke";
+    public const string InfraGrabProbe = "infragrab-finger-probe";
 }
