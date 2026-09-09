@@ -225,7 +225,7 @@ public sealed class FingerConnectionHandlerTests
     {
         var options = new HappyFingerOptions
         {
-            TelemetryIgnoredRemoteAddress = "203.0.113.10",
+            TelemetryIgnoredRemoteAddresses = ["203.0.113.10"],
             RequestTimeoutSeconds = 1
         };
         var stream = new ScriptedStream(Encoding.UTF8.GetBytes("kyle\r\n"));
@@ -238,6 +238,72 @@ public sealed class FingerConnectionHandlerTests
         Assert.Contains(
             "Kyle content",
             Encoding.UTF8.GetString(stream.WrittenBytes));
+    }
+
+    [Fact]
+    public void IsIgnoredTelemetrySource_EmptyListDoesNotIgnoreClient()
+    {
+        bool isIgnored = FingerConnectionHandler.IsIgnoredTelemetrySource(
+            CreateRemote(),
+            []);
+
+        Assert.False(isIgnored);
+    }
+
+    [Fact]
+    public void IsIgnoredTelemetrySource_OneMatchingAddressIgnoresClient()
+    {
+        bool isIgnored = FingerConnectionHandler.IsIgnoredTelemetrySource(
+            CreateRemote(),
+            ["203.0.113.10"]);
+
+        Assert.True(isIgnored);
+    }
+
+    [Fact]
+    public void IsIgnoredTelemetrySource_MatchingAddressAmongMultipleIgnoresClient()
+    {
+        bool isIgnored = FingerConnectionHandler.IsIgnoredTelemetrySource(
+            CreateRemote(),
+            ["192.0.2.1", "203.0.113.10", "198.51.100.1"]);
+
+        Assert.True(isIgnored);
+    }
+
+    [Fact]
+    public void IsIgnoredTelemetrySource_NonMatchingAddressDoesNotIgnoreClient()
+    {
+        bool isIgnored = FingerConnectionHandler.IsIgnoredTelemetrySource(
+            CreateRemote(),
+            ["192.0.2.1", "198.51.100.1"]);
+
+        Assert.False(isIgnored);
+    }
+
+    [Fact]
+    public void IsIgnoredTelemetrySource_InvalidAddressDoesNotThrowOrIgnoreClient()
+    {
+        bool isIgnored = FingerConnectionHandler.IsIgnoredTelemetrySource(
+            CreateRemote(),
+            ["not-an-ip-address"]);
+
+        Assert.False(isIgnored);
+    }
+
+    [Theory]
+    [InlineData("203.0.113.10", "::ffff:203.0.113.10")]
+    [InlineData("::ffff:203.0.113.10", "203.0.113.10")]
+    public void IsIgnoredTelemetrySource_NormalizesIpv4AndIpv4MappedIpv6(
+        string remoteAddress,
+        string configuredAddress)
+    {
+        var remote = new IPEndPoint(IPAddress.Parse(remoteAddress), 54321);
+
+        bool isIgnored = FingerConnectionHandler.IsIgnoredTelemetrySource(
+            remote,
+            [configuredAddress]);
+
+        Assert.True(isIgnored);
     }
 
     [Fact]
@@ -442,7 +508,7 @@ public sealed class FingerConnectionHandlerTests
         var missionControl = new TestMissionControlClient();
         await using var server = await FingerServerHarness.StartAsync(
             missionControl,
-            telemetryIgnoredRemoteAddress: "127.0.0.1");
+            telemetryIgnoredRemoteAddresses: ["127.0.0.1"]);
 
         string response =
             await ReadFingerResponseAsync(server.Port, "kyle\r\n");
@@ -562,7 +628,7 @@ public sealed class FingerConnectionHandlerTests
             IMissionControlClient missionControlClient,
             int maxConcurrentConnections = 4,
             IFingerResponseResolver? responseResolver = null,
-            string? telemetryIgnoredRemoteAddress = null)
+            string[]? telemetryIgnoredRemoteAddresses = null)
         {
             int port = GetAvailablePort();
             var options = new HappyFingerOptions
@@ -571,8 +637,8 @@ public sealed class FingerConnectionHandlerTests
                 Port = port,
                 MaxConcurrentConnections = maxConcurrentConnections,
                 RequestTimeoutSeconds = 1,
-                TelemetryIgnoredRemoteAddress =
-                    telemetryIgnoredRemoteAddress
+                TelemetryIgnoredRemoteAddresses =
+                    telemetryIgnoredRemoteAddresses ?? []
             };
 
             IHost host = Host.CreateDefaultBuilder()

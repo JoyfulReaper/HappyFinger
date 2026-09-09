@@ -15,7 +15,7 @@ public sealed class HappyFingerOptions : ITcpServerOptions
     public int Port { get; set; } = 79;
     public int MaxConcurrentConnections { get; set; } = 64;
     public int RequestTimeoutSeconds { get; set; } = 15;
-    public string? TelemetryIgnoredRemoteAddress { get; set; }
+    public string[] TelemetryIgnoredRemoteAddresses { get; set; } = [];
 
     ConnectionLimitBehavior ITcpServerOptions.ConnectionLimitBehavior =>
         ConnectionLimitBehavior.Wait;

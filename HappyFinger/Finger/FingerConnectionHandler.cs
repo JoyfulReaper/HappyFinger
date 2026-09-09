@@ -79,18 +79,9 @@ public sealed class FingerConnectionHandler(
 
         string remoteString = remote?.ToString() ?? "unknown";
 
-        string? remoteAddress = (remote as IPEndPoint)?
-            .Address
-            .MapToIPv4()
-            .ToString();
-
-        bool isIgnoredTelemetrySource =
-            !string.IsNullOrWhiteSpace(
-                options.TelemetryIgnoredRemoteAddress) &&
-            string.Equals(
-                remoteAddress,
-                options.TelemetryIgnoredRemoteAddress,
-                StringComparison.OrdinalIgnoreCase);
+        bool isIgnoredTelemetrySource = IsIgnoredTelemetrySource(
+            remote,
+            options.TelemetryIgnoredRemoteAddresses);
 
         string? request = null;
 
@@ -375,6 +366,26 @@ public sealed class FingerConnectionHandler(
         {
             return string.Empty;
         }
+    }
+
+    internal static bool IsIgnoredTelemetrySource(
+        EndPoint? remote,
+        IEnumerable<string> ignoredRemoteAddresses)
+    {
+        IPAddress? remoteAddress =
+            (remote as IPEndPoint)?
+                .Address
+                .MapToIPv4();
+
+        if (remoteAddress is null)
+        {
+            return false;
+        }
+
+        return ignoredRemoteAddresses.Any(
+            configuredAddress =>
+                IPAddress.TryParse(configuredAddress, out IPAddress? ignoredAddress) &&
+                remoteAddress.Equals(ignoredAddress.MapToIPv4()));
     }
 }
 

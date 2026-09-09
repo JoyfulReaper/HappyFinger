@@ -104,7 +104,7 @@ The default configuration resembles:
     "Port": 79,
     "MaxConcurrentConnections": 64,
     "RequestTimeoutSeconds": 15,
-    "TelemetryIgnoredRemoteAddress": null
+    "TelemetryIgnoredRemoteAddresses": []
   },
   "PlanFile": {
     "Path": "data/.plan",
@@ -129,13 +129,21 @@ The default configuration resembles:
 | `Port`                            |        `79` | TCP port used by the server.                      |
 | `MaxConcurrentConnections`        |        `64` | Maximum number of active client connections.      |
 | `RequestTimeoutSeconds`           |        `15` | Time allowed for a client to send a request line. |
-| `TelemetryIgnoredRemoteAddress`   |      `null` | Optional remote IP address excluded from request telemetry, such as a health monitor. |
+| `TelemetryIgnoredRemoteAddresses` |        `[]` | Remote IP addresses excluded from request telemetry, such as health monitors. |
 | `PlanFile:Path`                   | `data/.plan` | Trusted path for the `now` record `.plan` file.  |
 | `PlanFile:MaxBytes`               |     `16384` | Maximum `.plan` bytes read per request.           |
 | `FingerContent:OverrideDirectory` |      `null` | Optional absolute directory for editable record overrides. |
 | `FingerContent:MaxBytes`          |     `16384` | Maximum static record bytes read per request.     |
 | `RandomSteamGame:BaseUrl`         | `https://randomsteam.kgivler.com/` | Random Steam Game API base URL. |
 | `RandomSteamGame:TimeoutSeconds`  |         `5` | Timeout for Random Steam Game API calls.          |
+
+Environment variables use double underscores. Array entries use a zero-based
+index, for example:
+
+```text
+Finger__TelemetryIgnoredRemoteAddresses__0
+Finger__TelemetryIgnoredRemoteAddresses__1
+```
 
 For a public server, bind to all interfaces:
 
@@ -234,7 +242,7 @@ connections.
 
 HappyFinger publishes one `happyfinger.request.completed` event for each handled
 request, except application shutdown cases and requests from
-`TelemetryIgnoredRemoteAddress`. The protocol response is written and the
+`TelemetryIgnoredRemoteAddresses`. The protocol response is written and the
 socket is closed before request telemetry runs. This releases the connection
 slot promptly, so a slow telemetry destination does not hold up a queued
 client.
